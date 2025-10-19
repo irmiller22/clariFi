@@ -1,4 +1,4 @@
-.PHONY: help install test test-backend test-frontend lint format run-backend run-frontend clean
+.PHONY: help install test test-backend test-frontend lint format run-backend run-frontend build-frontend clean
 
 # Default target
 help:
@@ -13,18 +13,22 @@ help:
 	@echo "Testing:"
 	@echo "  make test             Run all tests (backend + frontend)"
 	@echo "  make test-backend     Run backend tests"
+	@echo "  make test-frontend    Run frontend tests"
 	@echo "  make test-coverage    Run backend tests with coverage"
 	@echo ""
 	@echo "Development:"
 	@echo "  make run-backend      Start FastAPI backend server"
+	@echo "  make run-frontend     Start Next.js dev server"
+	@echo "  make build-frontend   Build frontend for production"
 	@echo "  make lint             Run linters on all code"
+	@echo "  make lint-frontend    Run frontend linter"
 	@echo "  make format           Format all code"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            Remove build artifacts and caches"
 
 # Installation
-install: install-backend
+install: install-backend install-frontend
 
 install-backend:
 	@echo "Installing backend dependencies with uv..."
@@ -32,14 +36,18 @@ install-backend:
 
 install-frontend:
 	@echo "Installing frontend dependencies..."
-	@echo "Frontend not yet implemented"
+	cd frontend && npm install
 
 # Testing
-test: test-backend
+test: test-backend test-frontend
 
 test-backend:
 	@echo "Running backend tests..."
 	cd backend && uv run python -m pytest tests/ -v
+
+test-frontend:
+	@echo "Running frontend tests..."
+	@echo "Frontend tests not yet implemented"
 
 test-coverage:
 	@echo "Running backend tests with coverage..."
@@ -51,13 +59,19 @@ run-backend:
 	cd backend && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 run-frontend:
-	@echo "Starting frontend dev server..."
-	@echo "Frontend not yet implemented"
+	@echo "Starting Next.js dev server..."
+	cd frontend && npm run dev
+
+build-frontend:
+	@echo "Building frontend for production..."
+	cd frontend && npm run build
 
 # Code Quality
-lint:
-	@echo "Running linters..."
-	@echo "Linting not yet configured"
+lint: lint-frontend
+
+lint-frontend:
+	@echo "Running frontend linter..."
+	cd frontend && npm run lint
 
 format:
 	@echo "Formatting code..."
@@ -72,4 +86,6 @@ clean:
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
 	find . -type f -name ".coverage" -delete
+	rm -rf frontend/.next 2>/dev/null || true
+	rm -rf frontend/out 2>/dev/null || true
 	@echo "Clean complete!"
