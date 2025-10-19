@@ -3,7 +3,7 @@
 import pytest
 from decimal import Decimal
 from io import StringIO
-from app.services.csv_parser import CSVParser, CSVParseError
+from src.services.csv_parser import CSVParser, CSVParseError
 
 
 class TestCSVParser:

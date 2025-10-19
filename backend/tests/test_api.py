@@ -2,8 +2,8 @@
 
 import pytest
 from decimal import Decimal
-from app.api import UploadsContextManager
-from app.schemas import TransactionCreate
+from src.api import UploadsContextManager
+from src.schemas import TransactionCreate
 
 
 class TestUploadsContextManager:

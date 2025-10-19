@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from app.models import Upload, Transaction, UploadDTO, TransactionDTO
-from app.schemas import TransactionCreate
-from app.database import AsyncSessionLocal
+from src.models import Upload, Transaction, UploadDTO, TransactionDTO
+from src.schemas import TransactionCreate
+from src.database import AsyncSessionLocal
 
 
 class UploadsContextManager:

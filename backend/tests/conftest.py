@@ -3,7 +3,7 @@
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from app.database import init_db, drop_db, engine
+from src.database import init_db, drop_db, engine
 
 
 @pytest.fixture(scope="session", autouse=True)

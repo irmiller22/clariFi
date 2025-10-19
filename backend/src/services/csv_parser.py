@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import List
 from pydantic import ValidationError
-from app.schemas import TransactionCreate
+from src.schemas import TransactionCreate
 
 
 class CSVParseError(Exception):
