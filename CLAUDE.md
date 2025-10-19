@@ -129,6 +129,25 @@ Performance target: Handle 10,000+ transactions smoothly
 - Database persistence for historical data
 - Natural language queries about spending
 
+## TODOs
+
+### Database & Performance Monitoring
+- [ ] **Add database instrumentation and metrics tracking** for async context managers
+  - Track connection pool metrics (utilization, wait times, pool size)
+  - Monitor transaction metrics (duration, commit/rollback rates, long-running transactions)
+  - Detect session leaks (unclosed sessions, enter/exit ratio)
+  - Measure query performance (execution time, N+1 detection, slow queries)
+  - Monitor async-specific metrics (concurrent tasks, await duration, event loop lag)
+  - Track database server metrics (active connections, locks, deadlocks)
+  - Set up alerts for critical thresholds (pool exhaustion, session leaks, slow queries)
+  - **Priority metrics for CSV upload use case:**
+    - Transaction duration (upload speed)
+    - Pool utilization (concurrent upload handling)
+    - Session leaks (context manager cleanup)
+    - Rollback rate (upload failure rate)
+    - Long-running transactions (large CSV blocking)
+  - **Recommended stack:** Prometheus + Grafana or similar observability platform
+
 ## References
 
 - Full requirements: See PRD.md

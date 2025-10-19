@@ -1,11 +1,20 @@
 """Application configuration using pydantic-settings."""
 
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal
 
 
 class Settings(BaseSettings):
-    """Application settings."""
+    """
+    Application settings.
+
+    Configuration Philosophy:
+    - Use environment variables as the single source of truth
+    - POSTGRESQL_URL is the canonical database connection string
+    - Leverage direnv + .env files for local development
+    - No separate configs for test/dev/prod - one URL to rule them all
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -18,9 +27,31 @@ class Settings(BaseSettings):
     environment: Literal["development", "production", "test"] = "development"
     debug: bool = True
 
-    # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/range_finance"
-    database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/range_finance"
+    # Database - Read from POSTGRESQL_URL environment variable
+    # Format: postgresql://user:password@host:port/database
+    # Default for local development
+    @property
+    def database_url(self) -> str:
+        """
+        Async database URL from POSTGRESQL_URL environment variable.
+        Converts postgresql:// to postgresql+asyncpg:// for async support.
+        """
+        postgresql_url = os.getenv(
+            "POSTGRESQL_URL",
+            "postgresql://range:range@localhost:5432/range"
+        )
+        return postgresql_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    @property
+    def database_url_sync(self) -> str:
+        """
+        Sync database URL from POSTGRESQL_URL environment variable.
+        Used for Alembic migrations.
+        """
+        return os.getenv(
+            "POSTGRESQL_URL",
+            "postgresql://range:range@localhost:5432/range"
+        )
 
     # API
     api_title: str = "Range Finance API"

@@ -89,6 +89,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "greenlet" },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -110,6 +111,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "greenlet", specifier = ">=3.2.4" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },

@@ -1,0 +1,15 @@
+# Example .envrc file for direnv
+# Copy this to .envrc and customize for your local environment
+# Then run: direnv allow
+
+# Database Configuration
+# Single source of truth for database connection
+export POSTGRESQL_URL="postgresql://range:range@localhost:5432/range"
+
+# PostgreSQL Superuser (for test database setup)
+# Defaults to current user if not set
+export POSTGRESQL_SUPERUSER="imiller"
+
+# Application Environment
+export ENVIRONMENT="development"
+export DEBUG="true"
