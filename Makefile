@@ -56,7 +56,7 @@ test-coverage:
 # Development
 run-backend:
 	@echo "Starting FastAPI backend server..."
-	cd backend && uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+	cd backend && uv run python -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 run-frontend:
 	@echo "Starting Next.js dev server..."
