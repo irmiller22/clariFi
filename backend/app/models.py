@@ -1,5 +1,6 @@
-"""SQLAlchemy database models."""
+"""Domain models: DTOs for database operations and read-only domain classes."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import String, DateTime, Numeric, ForeignKey, Integer
@@ -7,14 +8,19 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List
 
 
+# ============================================================================
+# DTOs (Data Transfer Objects) - SQLAlchemy models for database operations
+# ============================================================================
+
+
 class Base(DeclarativeBase):
-    """Base class for all models."""
+    """Base class for all DTO models."""
 
     pass
 
 
-class Upload(Base):
-    """Upload model representing a CSV file upload session."""
+class UploadDTO(Base):
+    """DTO for Upload - used for database read/write operations."""
 
     __tablename__ = "uploads"
 
@@ -23,13 +29,13 @@ class Upload(Base):
     transaction_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Relationship to transactions
-    transactions: Mapped[List["Transaction"]] = relationship(
-        "Transaction", back_populates="upload", cascade="all, delete-orphan"
+    transactions: Mapped[List["TransactionDTO"]] = relationship(
+        "TransactionDTO", back_populates="upload", cascade="all, delete-orphan"
     )
 
 
-class Transaction(Base):
-    """Transaction model representing a single credit card transaction."""
+class TransactionDTO(Base):
+    """DTO for Transaction - used for database read/write operations."""
 
     __tablename__ = "transactions"
 
@@ -46,4 +52,76 @@ class Transaction(Base):
     memo: Mapped[str] = mapped_column(String(255), nullable=True, default="")
 
     # Relationship to upload
-    upload: Mapped["Upload"] = relationship("Upload", back_populates="transactions")
+    upload: Mapped["UploadDTO"] = relationship("UploadDTO", back_populates="transactions")
+
+
+# ============================================================================
+# Read-only Domain Models - Created from DTOs after database session closes
+# ============================================================================
+
+
+@dataclass(frozen=True)
+class Transaction:
+    """Read-only Transaction domain model."""
+
+    id: int
+    upload_id: int
+    transaction_date: str
+    post_date: str
+    description: str
+    category: str
+    type: str
+    amount: Decimal
+    memo: str
+
+    @classmethod
+    def from_dto(cls, dto: TransactionDTO) -> "Transaction":
+        """
+        Create a read-only Transaction from a TransactionDTO.
+
+        Args:
+            dto: TransactionDTO instance from database
+
+        Returns:
+            Read-only Transaction instance
+        """
+        return cls(
+            id=dto.id,
+            upload_id=dto.upload_id,
+            transaction_date=dto.transaction_date,
+            post_date=dto.post_date,
+            description=dto.description,
+            category=dto.category,
+            type=dto.type,
+            amount=dto.amount,
+            memo=dto.memo,
+        )
+
+
+@dataclass(frozen=True)
+class Upload:
+    """Read-only Upload domain model."""
+
+    id: int
+    created_at: datetime
+    transaction_count: int
+    transactions: List[Transaction]
+
+    @classmethod
+    def from_dto(cls, dto: UploadDTO) -> "Upload":
+        """
+        Create a read-only Upload from an UploadDTO.
+
+        Args:
+            dto: UploadDTO instance from database
+
+        Returns:
+            Read-only Upload instance with all transactions converted
+        """
+        transactions = [Transaction.from_dto(t) for t in dto.transactions]
+        return cls(
+            id=dto.id,
+            created_at=dto.created_at,
+            transaction_count=dto.transaction_count,
+            transactions=transactions,
+        )
