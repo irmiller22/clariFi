@@ -94,7 +94,7 @@ class CSVParser:
         """
         # Decode HTML entities and strip whitespace
         description = html.unescape(row["Description"].strip())
-        category = row["Category"].strip()
+        category = row["Category"].strip() or "Uncategorized"  # Default for empty categories
         type_value = row["Type"].strip()
         memo = row["Memo"].strip() if row["Memo"] else ""
 

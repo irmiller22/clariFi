@@ -42,6 +42,10 @@ htmlcov/
 *.swo
 *~
 
+# Environment files
+.env*
+.envrc
+
 # OS
 .DS_Store
 Thumbs.db
