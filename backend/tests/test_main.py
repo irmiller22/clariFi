@@ -16,7 +16,7 @@ async def test_root():
         data = response.json()
         assert data["status"] == "healthy"
         assert data["version"] == "0.1.0"
-        assert "Range Finance API" in data["message"]
+        assert "clariFi API" in data["message"]
 
 
 @pytest.mark.asyncio
