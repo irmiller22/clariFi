@@ -1,9 +1,8 @@
 """Pydantic schemas for request/response validation."""
 
-from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional
 
 
 class TransactionBase(BaseModel):
@@ -55,33 +54,3 @@ class TransactionCreate(TransactionBase):
     """Schema for creating a transaction."""
 
     pass
-
-
-class TransactionResponse(TransactionBase):
-    """Schema for transaction response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    upload_id: int
-
-
-class UploadResponse(BaseModel):
-    """Schema for upload response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    created_at: datetime
-    transaction_count: int
-    transactions: List[TransactionResponse]
-
-
-class UploadSummary(BaseModel):
-    """Schema for upload summary (without full transaction list)."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    created_at: datetime
-    transaction_count: int

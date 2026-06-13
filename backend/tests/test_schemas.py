@@ -3,7 +3,7 @@
 import pytest
 from decimal import Decimal
 from pydantic import ValidationError
-from src.schemas import TransactionCreate, TransactionResponse
+from src.schemas import TransactionCreate
 
 
 class TestTransactionCreate:
