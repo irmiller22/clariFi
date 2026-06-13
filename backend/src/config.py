@@ -1,7 +1,8 @@
 """Application configuration using pydantic-settings."""
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -27,7 +28,9 @@ class Settings(BaseSettings):
     # API
     api_title: str = "clariFi API"
     api_version: str = "0.1.0"
-    api_description: str = "Personal finance application for analyzing credit card spending patterns"
+    api_description: str = (
+        "Personal finance application for analyzing credit card spending patterns"
+    )
 
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]

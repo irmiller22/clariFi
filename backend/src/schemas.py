@@ -1,8 +1,8 @@
 """Pydantic schemas for request/response validation."""
 
 from decimal import Decimal
+
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
 
 
 class TransactionBase(BaseModel):
@@ -14,7 +14,7 @@ class TransactionBase(BaseModel):
     category: str = Field(..., description="Transaction category")
     type: str = Field(..., description="Transaction type (e.g., Sale, Payment)")
     amount: Decimal = Field(..., description="Transaction amount")
-    memo: Optional[str] = Field(default="", description="Additional memo/notes")
+    memo: str | None = Field(default="", description="Additional memo/notes")
 
     @field_validator("transaction_date", "post_date")
     @classmethod
@@ -52,5 +52,3 @@ class TransactionBase(BaseModel):
 
 class TransactionCreate(TransactionBase):
     """Schema for creating a transaction."""
-
-    pass

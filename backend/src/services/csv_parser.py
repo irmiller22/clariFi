@@ -4,31 +4,32 @@ import csv
 import html
 from decimal import Decimal, InvalidOperation
 from io import StringIO
-from typing import List
+
 from pydantic import ValidationError
+
 from src.schemas import TransactionCreate
 
 
 class CSVParseError(Exception):
     """Exception raised when CSV parsing fails."""
 
-    pass
-
 
 class CSVParser:
     """Parser for Chase CSV transaction files."""
 
-    REQUIRED_COLUMNS = {
-        "Transaction Date",
-        "Post Date",
-        "Description",
-        "Category",
-        "Type",
-        "Amount",
-        "Memo",
-    }
+    REQUIRED_COLUMNS = frozenset(
+        {
+            "Transaction Date",
+            "Post Date",
+            "Description",
+            "Category",
+            "Type",
+            "Amount",
+            "Memo",
+        }
+    )
 
-    def parse(self, csv_content: str) -> List[TransactionCreate]:
+    def parse(self, csv_content: str) -> list[TransactionCreate]:
         """
         Parse CSV content and return list of TransactionCreate objects.
 
@@ -66,9 +67,7 @@ class CSVParser:
                     transaction = self._parse_row(row)
                     transactions.append(transaction)
                 except (ValidationError, ValueError, InvalidOperation) as e:
-                    raise CSVParseError(
-                        f"Error parsing row {row_num}: {str(e)}"
-                    ) from e
+                    raise CSVParseError(f"Error parsing row {row_num}: {e!s}") from e
 
             if not transactions:
                 raise CSVParseError("CSV contains no transaction data")
@@ -76,7 +75,7 @@ class CSVParser:
             return transactions
 
         except csv.Error as e:
-            raise CSVParseError(f"Invalid CSV format: {str(e)}") from e
+            raise CSVParseError(f"Invalid CSV format: {e!s}") from e
 
     def _parse_row(self, row: dict) -> TransactionCreate:
         """
@@ -105,7 +104,7 @@ class CSVParser:
             raise ValueError(f"Invalid amount value: {row['Amount']}") from e
 
         # Create transaction object (this will validate dates and required fields)
-        transaction = TransactionCreate(
+        return TransactionCreate(
             transaction_date=row["Transaction Date"].strip(),
             post_date=row["Post Date"].strip(),
             description=description,
@@ -114,5 +113,3 @@ class CSVParser:
             amount=amount,
             memo=memo,
         )
-
-        return transaction

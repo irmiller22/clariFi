@@ -8,7 +8,7 @@ const mockLocalStorage = {
   removeItem: jest.fn(),
   clear: jest.fn(),
 }
-global.localStorage = mockLocalStorage as any
+global.localStorage = mockLocalStorage as unknown as Storage
 
 // Mock window.matchMedia
 const mockMatchMedia = jest.fn()

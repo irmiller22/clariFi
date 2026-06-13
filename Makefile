@@ -1,4 +1,4 @@
-.PHONY: help install test test-backend test-frontend lint format run-backend run-frontend build-frontend clean
+.PHONY: help install install-backend install-frontend test test-backend test-frontend test-coverage lint lint-backend lint-frontend format format-backend run-backend run-frontend build-frontend clean
 
 # Default target
 help:
@@ -20,9 +20,10 @@ help:
 	@echo "  make run-backend      Start FastAPI backend server"
 	@echo "  make run-frontend     Start Next.js dev server"
 	@echo "  make build-frontend   Build frontend for production"
-	@echo "  make lint             Run linters on all code"
+	@echo "  make lint             Run linters on all code (backend + frontend)"
+	@echo "  make lint-backend     Run backend linter (ruff + mypy)"
 	@echo "  make lint-frontend    Run frontend linter"
-	@echo "  make format           Format all code"
+	@echo "  make format           Format backend code (ruff)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            Remove build artifacts and caches"
@@ -47,7 +48,7 @@ test-backend:
 
 test-frontend:
 	@echo "Running frontend tests..."
-	@echo "Frontend tests not yet implemented"
+	cd frontend && npm test
 
 test-coverage:
 	@echo "Running backend tests with coverage..."
@@ -67,15 +68,21 @@ build-frontend:
 	cd frontend && npm run build
 
 # Code Quality
-lint: lint-frontend
+lint: lint-backend lint-frontend
+
+lint-backend:
+	@echo "Running backend linter (ruff + mypy)..."
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src
 
 lint-frontend:
 	@echo "Running frontend linter..."
 	cd frontend && npm run lint
 
-format:
-	@echo "Formatting code..."
-	@echo "Formatting not yet configured"
+format: format-backend
+
+format-backend:
+	@echo "Formatting backend code (ruff)..."
+	cd backend && uv run ruff check --fix . && uv run ruff format .
 
 # Cleanup
 clean:

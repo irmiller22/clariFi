@@ -1,9 +1,10 @@
 """Tests for CSV parser service."""
 
-import pytest
 from decimal import Decimal
-from io import StringIO
-from src.services.csv_parser import CSVParser, CSVParseError
+
+import pytest
+
+from src.services.csv_parser import CSVParseError, CSVParser
 
 
 class TestCSVParser:
@@ -130,10 +131,12 @@ class TestCSVParser:
         """Test parsing CSV with many transactions."""
         # Create a CSV with 100 transactions
         header = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n"
-        rows = "\n".join([
-            f"10/{i%28+1}/2025,10/{i%28+1}/2025,Merchant {i},Shopping,Sale,-{i}.00,"
-            for i in range(1, 101)
-        ])
+        rows = "\n".join(
+            [
+                f"10/{i % 28 + 1}/2025,10/{i % 28 + 1}/2025,Merchant {i},Shopping,Sale,-{i}.00,"
+                for i in range(1, 101)
+            ]
+        )
         csv_content = header + rows
 
         parser = CSVParser()

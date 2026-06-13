@@ -1,8 +1,10 @@
 """Tests for Pydantic schemas."""
 
-import pytest
 from decimal import Decimal
+
+import pytest
 from pydantic import ValidationError
+
 from src.schemas import TransactionCreate
 
 
