@@ -1,1 +1,1 @@
-"""Test suite for Range Finance Backend."""
+"""Test suite for clariFi Backend."""

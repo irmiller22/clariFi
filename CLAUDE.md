@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Range Finance is a personal finance application for analyzing credit card spending patterns via CSV uploads. The project serves as a learning platform for FastAPI (Python backend) and Next.js (React frontend), with future AI/LLM integration planned.
+clariFi is a personal finance application for analyzing credit card spending patterns via CSV uploads. The project serves as a learning platform for FastAPI (Python backend) and Next.js (React frontend), with future AI/LLM integration planned.
 
 **Primary Purpose:** CSV-based transaction analysis and visualization
 **Secondary Purpose:** Learning and practicing modern web development with TDD methodology
