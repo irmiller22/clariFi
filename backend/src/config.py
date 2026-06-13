@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         )
 
     # API
-    api_title: str = "Range Finance API"
+    api_title: str = "clariFi API"
     api_version: str = "0.1.0"
     api_description: str = "Personal finance application for analyzing credit card spending patterns"
 

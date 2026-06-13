@@ -1,5 +1,5 @@
 # Product Requirements Document (PRD)
-## Range Finance
+## clariFi
 
 **Version:** 1.0
 **Last Updated:** October 17, 2025
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Range Finance is a personal finance application designed to help users analyze and understand their credit card spending patterns to promote better financial behavior. The application provides a simple, intuitive interface for uploading credit card transaction data via CSV files and reviewing transactions through interactive visualizations and insights.
+clariFi is a personal finance application designed to help users analyze and understand their credit card spending patterns to promote better financial behavior. The application provides a simple, intuitive interface for uploading credit card transaction data via CSV files and reviewing transactions through interactive visualizations and insights.
 
 ---
 
@@ -20,7 +20,7 @@ Range Finance is a personal finance application designed to help users analyze a
 Many individuals struggle to understand their spending habits despite having access to transaction data through their credit card statements. Current banking apps often lack meaningful insights or actionable recommendations that could influence positive spending behavior changes.
 
 ### 2.2 Solution
-Range Finance provides a dedicated platform where users can:
+clariFi provides a dedicated platform where users can:
 - Upload credit card transaction data (CSV format)
 - Review and analyze transactions through an intuitive interface
 - Gain insights into spending patterns
@@ -391,7 +391,7 @@ Range Finance provides a dedicated platform where users can:
 - Mint: Comprehensive but requires bank login
 - YNAB: Budget-focused, manual entry heavy
 - Personal Capital: Investment-focused
-- **Range Finance Differentiator:** Simple CSV upload, no bank credentials required, focused on behavioral insights
+- **clariFi Differentiator:** Simple CSV upload, no bank credentials required, focused on behavioral insights
 
 ### 11.2 Technical References
 - FastAPI Documentation: https://fastapi.tiangolo.com/

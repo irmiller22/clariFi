@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "Range Finance - Available Commands"
+	@echo "clariFi - Available Commands"
 	@echo "===================================="
 	@echo ""
 	@echo "Setup & Installation:"
