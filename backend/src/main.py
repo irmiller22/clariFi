@@ -1,17 +1,16 @@
 """Main FastAPI application."""
 
-from decimal import ROUND_HALF_UP, Decimal
-
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.domain import Transaction, TransactionType
+from src.domain import TransactionType
 from src.schemas import (
     AnalyticsSummary,
     TransactionList,
     TransactionRead,
     UploadResult,
 )
+from src.services.analytics import SpendingSummary, summarize
 from src.services.csv_parser import CSVParseError, CSVParser
 from src.services.normalizer import normalize_many
 from src.store import SortField, SortOrder, StoredTransaction, store
@@ -31,8 +30,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_CENTS = Decimal("0.01")
-
 
 def _serialize(stored: StoredTransaction) -> TransactionRead:
     """Map a stored transaction to its client-facing representation."""
@@ -48,27 +45,14 @@ def _serialize(stored: StoredTransaction) -> TransactionRead:
     )
 
 
-def _summarize(transactions: list[Transaction]) -> AnalyticsSummary:
-    """Compute aggregate spending metrics with exact Decimal arithmetic.
-
-    Note: this lives inline for now. LAT-73 extracts it into a dedicated
-    analytics service (and refines spend-vs-income semantics).
-    """
-    spent = -sum((t.amount for t in transactions if t.amount < 0), Decimal(0))
-    income = sum((t.amount for t in transactions if t.amount > 0), Decimal(0))
-    count = len(transactions)
-    gross = spent + income
-    avg = gross / count if count else Decimal(0)
-
-    def cents(value: Decimal) -> float:
-        return float(value.quantize(_CENTS, rounding=ROUND_HALF_UP))
-
+def _summary_dto(summary: SpendingSummary) -> AnalyticsSummary:
+    """Convert the Decimal summary into the float-valued response DTO."""
     return AnalyticsSummary(
-        total_spent=cents(spent),
-        total_income=cents(income),
-        net_amount=cents(income - spent),
-        transaction_count=count,
-        avg_transaction_amount=cents(avg),
+        total_spent=float(summary.total_spent),
+        total_income=float(summary.total_income),
+        net_amount=float(summary.net_amount),
+        transaction_count=summary.transaction_count,
+        avg_transaction_amount=float(summary.avg_transaction_amount),
     )
 
 
@@ -109,7 +93,7 @@ async def upload_transactions(file: UploadFile = File(...)) -> UploadResult:
         success=True,
         message=f"Successfully parsed {len(stored)} transactions",
         transactions=[_serialize(s) for s in stored],
-        summary=_summarize(transactions),
+        summary=_summary_dto(summarize(transactions)),
     )
 
 
@@ -142,4 +126,4 @@ async def get_transactions(
 @app.get("/api/analytics/summary")
 async def get_analytics_summary() -> AnalyticsSummary:
     """Aggregate spending metrics for the current transaction set."""
-    return _summarize([s.transaction for s in store.all()])
+    return _summary_dto(summarize([s.transaction for s in store.all()]))
