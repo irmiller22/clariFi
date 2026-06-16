@@ -2,7 +2,10 @@
 
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.alias_generators import to_camel
+
+from src.domain import TransactionType
 
 
 class TransactionBase(BaseModel):
@@ -52,3 +55,52 @@ class TransactionBase(BaseModel):
 
 class TransactionCreate(TransactionBase):
     """Schema for creating a transaction."""
+
+
+# ---------------------------------------------------------------------------
+# Response DTOs (what the API returns to the frontend)
+# ---------------------------------------------------------------------------
+
+
+class TransactionRead(BaseModel):
+    """A single transaction as returned to the client.
+
+    ``amount`` is presented as a JSON number for JS consumers; exact ``Decimal``
+    arithmetic stays server-side. ``date`` is ``MM/DD/YYYY`` to match the
+    frontend's existing date handling.
+    """
+
+    id: str
+    date: str
+    description: str
+    amount: float
+    category: str
+    type: TransactionType
+
+
+class TransactionList(BaseModel):
+    """A page of transactions plus the total count before pagination."""
+
+    transactions: list[TransactionRead]
+    total: int
+
+
+class AnalyticsSummary(BaseModel):
+    """Aggregate spending metrics. Serialized with camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    total_spent: float
+    total_income: float
+    net_amount: float
+    transaction_count: int
+    avg_transaction_amount: float
+
+
+class UploadResult(BaseModel):
+    """Response for a successful CSV upload."""
+
+    success: bool
+    message: str
+    transactions: list[TransactionRead]
+    summary: AnalyticsSummary
