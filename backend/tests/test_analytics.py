@@ -7,14 +7,15 @@ from src.domain import Transaction
 from src.services.analytics import (
     SpendingSummary,
     spending_by_category,
+    spending_timeline,
     summarize,
 )
 
 
-def _tx(amount: str, category: str = "Misc") -> Transaction:
+def _tx(amount: str, category: str = "Misc", on: date = date(2025, 1, 1)) -> Transaction:
     return Transaction(
-        transaction_date=date(2025, 1, 1),
-        post_date=date(2025, 1, 1),
+        transaction_date=on,
+        post_date=on,
         description="x",
         merchant="x",
         category=category,
@@ -115,3 +116,63 @@ class TestSpendingByCategory:
         assert len(result) == 1
         assert result[0].category == "Uncategorized"
         assert result[0].amount == Decimal("40.00")
+
+
+class TestSpendingTimeline:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert spending_timeline([]) == []
+
+    def test_only_credits_returns_empty_list(self) -> None:
+        assert spending_timeline([_tx("100.00", on=date(2025, 1, 1))]) == []
+
+    def test_daily_buckets_with_cumulative(self) -> None:
+        result = spending_timeline(
+            [_tx("-10.00", on=date(2025, 1, 1)), _tx("-30.00", on=date(2025, 1, 3))],
+            "day",
+        )
+        # Jan 2 has no spend but is gap-filled with 0; cumulative carries.
+        assert [(p.date, p.amount, p.cumulative) for p in result] == [
+            (date(2025, 1, 1), Decimal("10.00"), Decimal("10.00")),
+            (date(2025, 1, 2), Decimal("0.00"), Decimal("10.00")),
+            (date(2025, 1, 3), Decimal("30.00"), Decimal("40.00")),
+        ]
+
+    def test_same_day_amounts_sum(self) -> None:
+        result = spending_timeline(
+            [_tx("-10.00", on=date(2025, 1, 1)), _tx("-5.00", on=date(2025, 1, 1))], "day"
+        )
+        assert len(result) == 1
+        assert result[0].amount == Decimal("15.00")
+
+    def test_weekly_buckets_key_on_monday(self) -> None:
+        # Jan 8 (Wed) and Jan 10 (Fri) 2025 both fall in the week of Mon Jan 6.
+        result = spending_timeline(
+            [_tx("-10.00", on=date(2025, 1, 8)), _tx("-20.00", on=date(2025, 1, 10))],
+            "week",
+        )
+        assert len(result) == 1
+        assert result[0].date == date(2025, 1, 6)
+        assert result[0].amount == Decimal("30.00")
+
+    def test_monthly_buckets_gap_fill_empty_months(self) -> None:
+        result = spending_timeline(
+            [_tx("-10.00", on=date(2025, 1, 15)), _tx("-30.00", on=date(2025, 3, 5))],
+            "month",
+        )
+        # Feb has no spend but is filled; months keyed on the 1st.
+        assert [(p.date, p.amount, p.cumulative) for p in result] == [
+            (date(2025, 1, 1), Decimal("10.00"), Decimal("10.00")),
+            (date(2025, 2, 1), Decimal("0.00"), Decimal("10.00")),
+            (date(2025, 3, 1), Decimal("30.00"), Decimal("40.00")),
+        ]
+
+    def test_monthly_gap_fill_crosses_year_boundary(self) -> None:
+        result = spending_timeline(
+            [_tx("-10.00", on=date(2024, 12, 1)), _tx("-20.00", on=date(2025, 2, 1))],
+            "month",
+        )
+        assert [p.date for p in result] == [
+            date(2024, 12, 1),
+            date(2025, 1, 1),
+            date(2025, 2, 1),
+        ]

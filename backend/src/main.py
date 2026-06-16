@@ -7,14 +7,18 @@ from src.domain import TransactionType
 from src.schemas import (
     AnalyticsSummary,
     CategorySpendingRead,
+    TimelinePointRead,
     TransactionList,
     TransactionRead,
     UploadResult,
 )
 from src.services.analytics import (
     CategorySpending,
+    Granularity,
     SpendingSummary,
+    TimelinePoint,
     spending_by_category,
+    spending_timeline,
     summarize,
 )
 from src.services.csv_parser import CSVParseError, CSVParser
@@ -69,6 +73,16 @@ def _category_dto(category: CategorySpending) -> CategorySpendingRead:
         amount=float(category.amount),
         count=category.count,
         percentage=float(category.percentage),
+    )
+
+
+def _timeline_dto(point: TimelinePoint) -> TimelinePointRead:
+    """Convert a Decimal timeline point into the float-valued response DTO."""
+    d = point.date
+    return TimelinePointRead(
+        date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
+        amount=float(point.amount),
+        cumulative=float(point.cumulative),
     )
 
 
@@ -150,3 +164,12 @@ async def get_category_analytics() -> list[CategorySpendingRead]:
     """Spend grouped by category for the current transaction set."""
     breakdown = spending_by_category([s.transaction for s in store.all()])
     return [_category_dto(c) for c in breakdown]
+
+
+@app.get("/api/analytics/timeline")
+async def get_timeline_analytics(
+    granularity: Granularity = "month",
+) -> list[TimelinePointRead]:
+    """Spend over time (gap-filled) at the requested granularity."""
+    timeline = spending_timeline([s.transaction for s in store.all()], granularity)
+    return [_timeline_dto(p) for p in timeline]

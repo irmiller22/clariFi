@@ -151,3 +151,30 @@ class TestByCategoryEndpoint:
         assert groceries["amount"] == 50.00
         assert groceries["count"] == 1
         assert groceries["percentage"] == round(50 / 90 * 100, 2)
+
+
+class TestTimelineEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        body = (await client.get("/api/analytics/timeline")).json()
+        assert body == []
+
+    async def test_monthly_default_returns_points(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/timeline")).json()
+        # All sample rows are in Jan 2025 -> one monthly bucket of the spend.
+        assert len(body) == 1
+        assert body[0]["date"] == "01/01/2025"
+        assert body[0]["amount"] == 90.00
+        assert body[0]["cumulative"] == 90.00
+
+    async def test_daily_granularity(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/timeline", params={"granularity": "day"})).json()
+        # Spend on Jan 5 and Jan 10; Jan 6-9 gap-filled -> 6 daily points.
+        assert len(body) == 6
+        assert body[0]["date"] == "01/05/2025"
+        assert body[-1]["cumulative"] == 90.00
+
+    async def test_rejects_invalid_granularity(self, client: AsyncClient) -> None:
+        response = await client.get("/api/analytics/timeline", params={"granularity": "yearly"})
+        assert response.status_code == 422
