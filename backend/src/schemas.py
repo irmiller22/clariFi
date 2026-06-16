@@ -97,6 +97,15 @@ class AnalyticsSummary(BaseModel):
     avg_transaction_amount: float
 
 
+class CategorySpendingRead(BaseModel):
+    """A single category's spend, as returned to the client."""
+
+    category: str
+    amount: float
+    count: int
+    percentage: float
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 

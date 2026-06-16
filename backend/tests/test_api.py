@@ -134,3 +134,20 @@ class TestAnalyticsSummaryEndpoint:
         body = (await client.get("/api/analytics/summary")).json()
         assert body["totalSpent"] == 90.00
         assert body["transactionCount"] == 3
+
+
+class TestByCategoryEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        body = (await client.get("/api/analytics/by-category")).json()
+        assert body == []
+
+    async def test_returns_spend_breakdown(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/by-category")).json()
+        # Income (a credit) is excluded; only the two debit categories remain.
+        categories = {row["category"] for row in body}
+        assert categories == {"Groceries", "Gas"}
+        groceries = next(row for row in body if row["category"] == "Groceries")
+        assert groceries["amount"] == 50.00
+        assert groceries["count"] == 1
+        assert groceries["percentage"] == round(50 / 90 * 100, 2)
