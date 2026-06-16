@@ -6,11 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.domain import TransactionType
 from src.schemas import (
     AnalyticsSummary,
+    CategorySpendingRead,
     TransactionList,
     TransactionRead,
     UploadResult,
 )
-from src.services.analytics import SpendingSummary, summarize
+from src.services.analytics import (
+    CategorySpending,
+    SpendingSummary,
+    spending_by_category,
+    summarize,
+)
 from src.services.csv_parser import CSVParseError, CSVParser
 from src.services.normalizer import normalize_many
 from src.store import SortField, SortOrder, StoredTransaction, store
@@ -53,6 +59,16 @@ def _summary_dto(summary: SpendingSummary) -> AnalyticsSummary:
         net_amount=float(summary.net_amount),
         transaction_count=summary.transaction_count,
         avg_transaction_amount=float(summary.avg_transaction_amount),
+    )
+
+
+def _category_dto(category: CategorySpending) -> CategorySpendingRead:
+    """Convert a Decimal category breakdown into the float-valued response DTO."""
+    return CategorySpendingRead(
+        category=category.category,
+        amount=float(category.amount),
+        count=category.count,
+        percentage=float(category.percentage),
     )
 
 
@@ -127,3 +143,10 @@ async def get_transactions(
 async def get_analytics_summary() -> AnalyticsSummary:
     """Aggregate spending metrics for the current transaction set."""
     return _summary_dto(summarize([s.transaction for s in store.all()]))
+
+
+@app.get("/api/analytics/by-category")
+async def get_category_analytics() -> list[CategorySpendingRead]:
+    """Spend grouped by category for the current transaction set."""
+    breakdown = spending_by_category([s.transaction for s in store.all()])
+    return [_category_dto(c) for c in breakdown]
