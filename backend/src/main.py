@@ -1,12 +1,15 @@
 """Main FastAPI application."""
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.domain import TransactionType
 from src.schemas import (
     AnalyticsSummary,
     CategorySpendingRead,
+    CategoryTrendRead,
+    MonthlyTrendRead,
+    SpendingTrendsRead,
     TimelinePointRead,
     TransactionList,
     TransactionRead,
@@ -15,11 +18,14 @@ from src.schemas import (
 from src.services.analytics import (
     CategorySpending,
     Granularity,
+    MonthlyPoint,
     SpendingSummary,
+    SpendingTrends,
     TimelinePoint,
     spending_by_category,
     spending_timeline,
     summarize,
+    trends,
 )
 from src.services.csv_parser import CSVParseError, CSVParser
 from src.services.normalizer import normalize_many
@@ -83,6 +89,31 @@ def _timeline_dto(point: TimelinePoint) -> TimelinePointRead:
         date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
         amount=float(point.amount),
         cumulative=float(point.cumulative),
+    )
+
+
+def _monthly_trend_dto(point: MonthlyPoint) -> MonthlyTrendRead:
+    """Convert a Decimal monthly trend point into the float-valued response DTO."""
+    return MonthlyTrendRead(
+        month=point.month,
+        amount=float(point.amount),
+        delta=float(point.delta),
+        pct_change=None if point.pct_change is None else float(point.pct_change),
+        direction=point.direction,
+    )
+
+
+def _trends_dto(result: SpendingTrends) -> SpendingTrendsRead:
+    """Convert the Decimal trends result into the float-valued response DTO."""
+    return SpendingTrendsRead(
+        overall=[_monthly_trend_dto(p) for p in result.overall],
+        by_category=[
+            CategoryTrendRead(
+                category=trend.category,
+                points=[_monthly_trend_dto(p) for p in trend.points],
+            )
+            for trend in result.by_category
+        ],
     )
 
 
@@ -173,3 +204,17 @@ async def get_timeline_analytics(
     """Spend over time (gap-filled) at the requested granularity."""
     timeline = spending_timeline([s.transaction for s in store.all()], granularity)
     return [_timeline_dto(p) for p in timeline]
+
+
+@app.get("/api/analytics/trends")
+async def get_trends_analytics(
+    category: str | None = None,
+    months: int | None = Query(default=None, ge=1),
+) -> SpendingTrendsRead:
+    """Month-over-month spend trends, overall and by category."""
+    result = trends(
+        [s.transaction for s in store.all()],
+        category=category,
+        months=months,
+    )
+    return _trends_dto(result)

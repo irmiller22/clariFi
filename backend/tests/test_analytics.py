@@ -9,6 +9,7 @@ from src.services.analytics import (
     spending_by_category,
     spending_timeline,
     summarize,
+    trends,
 )
 
 
@@ -176,3 +177,104 @@ class TestSpendingTimeline:
             date(2025, 1, 1),
             date(2025, 2, 1),
         ]
+
+
+class TestTrends:
+    def test_empty_set_returns_empty_series(self) -> None:
+        result = trends([])
+        assert result.overall == []
+        assert result.by_category == []
+
+    def test_single_month_has_no_prior(self) -> None:
+        result = trends([_tx("-100.00", on=date(2025, 1, 10))])
+        assert len(result.overall) == 1
+        point = result.overall[0]
+        assert point.month == "2025-01"
+        assert point.amount == Decimal("100.00")
+        assert point.delta == Decimal("0.00")
+        assert point.pct_change is None
+        assert point.direction == "flat"
+
+    def test_three_months_deltas_and_pct(self) -> None:
+        result = trends(
+            [
+                _tx("-100.00", on=date(2025, 1, 1)),
+                _tx("-150.00", on=date(2025, 2, 1)),
+                _tx("-120.00", on=date(2025, 3, 1)),
+            ]
+        )
+        overall = result.overall
+        assert [p.month for p in overall] == ["2025-01", "2025-02", "2025-03"]
+        # Feb: +50 on 100 -> +50%, up
+        assert overall[1].delta == Decimal("50.00")
+        assert overall[1].pct_change == Decimal("50.00")
+        assert overall[1].direction == "up"
+        # Mar: -30 on 150 -> -20%, down
+        assert overall[2].delta == Decimal("-30.00")
+        assert overall[2].pct_change == Decimal("-20.00")
+        assert overall[2].direction == "down"
+
+    def test_flat_month(self) -> None:
+        result = trends([_tx("-50.00", on=date(2025, 1, 1)), _tx("-50.00", on=date(2025, 2, 1))])
+        assert result.overall[1].delta == Decimal("0.00")
+        assert result.overall[1].pct_change == Decimal("0.00")
+        assert result.overall[1].direction == "flat"
+
+    def test_zero_prior_month_guards_pct(self) -> None:
+        # Jan spend, Feb none (gap-filled 0), Mar spend.
+        result = trends([_tx("-100.00", on=date(2025, 1, 1)), _tx("-40.00", on=date(2025, 3, 1))])
+        feb, mar = result.overall[1], result.overall[2]
+        assert feb.amount == Decimal("0.00")
+        assert feb.direction == "down"  # 100 -> 0
+        assert mar.pct_change is None  # prior month was 0; can't divide
+        assert mar.direction == "up"
+
+    def test_dropped_category_drops_to_zero(self) -> None:
+        result = trends(
+            [
+                _tx("-30.00", category="Gym", on=date(2025, 1, 1)),
+                _tx("-30.00", category="Food", on=date(2025, 2, 1)),
+            ]
+        )
+        gym = next(c for c in result.by_category if c.category == "Gym")
+        assert gym.points[0].amount == Decimal("30.00")
+        assert gym.points[1].amount == Decimal("0.00")
+        assert gym.points[1].direction == "down"
+
+    def test_new_category_rises_from_zero(self) -> None:
+        result = trends(
+            [
+                _tx("-30.00", category="Food", on=date(2025, 1, 1)),
+                _tx("-25.00", category="Travel", on=date(2025, 2, 1)),
+            ]
+        )
+        travel = next(c for c in result.by_category if c.category == "Travel")
+        assert travel.points[0].amount == Decimal("0.00")
+        assert travel.points[1].amount == Decimal("25.00")
+        assert travel.points[1].direction == "up"
+        assert travel.points[1].pct_change is None  # rose from 0
+
+    def test_lookback_window_keeps_true_delta(self) -> None:
+        result = trends(
+            [
+                _tx("-100.00", on=date(2025, 1, 1)),
+                _tx("-150.00", on=date(2025, 2, 1)),
+                _tx("-120.00", on=date(2025, 3, 1)),
+            ],
+            months=2,
+        )
+        # Only Feb and Mar shown, but Feb keeps its delta vs Jan (not reset).
+        assert [p.month for p in result.overall] == ["2025-02", "2025-03"]
+        assert result.overall[0].delta == Decimal("50.00")
+        assert result.overall[0].direction == "up"
+
+    def test_category_filter_restricts_computation(self) -> None:
+        result = trends(
+            [
+                _tx("-100.00", category="Food", on=date(2025, 1, 1)),
+                _tx("-50.00", category="Gym", on=date(2025, 1, 1)),
+            ],
+            category="Food",
+        )
+        assert [c.category for c in result.by_category] == ["Food"]
+        assert result.overall[0].amount == Decimal("100.00")
