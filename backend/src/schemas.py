@@ -106,6 +106,14 @@ class CategorySpendingRead(BaseModel):
     percentage: float
 
 
+class TimelinePointRead(BaseModel):
+    """Spend in one time bucket, as returned to the client."""
+
+    date: str
+    amount: float
+    cumulative: float
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 
