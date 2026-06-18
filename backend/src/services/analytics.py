@@ -17,6 +17,7 @@ _CENTS = Decimal("0.01")
 _HUNDRED = Decimal(100)
 
 Granularity = Literal["day", "week", "month"]
+Direction = Literal["up", "down", "flat"]
 
 
 def _to_cents(value: Decimal) -> Decimal:
@@ -163,3 +164,115 @@ def spending_timeline(
         points.append(TimelinePoint(current, _to_cents(amount), _to_cents(cumulative)))
         current = _next_bucket(current, granularity)
     return points
+
+
+@dataclass(frozen=True)
+class MonthlyPoint:
+    """One month in a spend series, with change vs the previous month.
+
+    ``delta`` is ``amount - previous month's amount``; ``pct_change`` is the
+    percentage change, or ``None`` when there is no comparable prior month
+    (the first month, or a prior month with zero spend — the zero-base guard).
+    """
+
+    month: str  # YYYY-MM
+    amount: Decimal
+    delta: Decimal
+    pct_change: Decimal | None
+    direction: Direction
+
+
+@dataclass(frozen=True)
+class CategoryTrend:
+    """A per-category monthly spend series."""
+
+    category: str
+    points: list[MonthlyPoint]
+
+
+@dataclass(frozen=True)
+class SpendingTrends:
+    """Month-over-month spend trends, overall and broken down by category."""
+
+    overall: list[MonthlyPoint]
+    by_category: list[CategoryTrend]
+
+
+def _month_range(start: str, end: str) -> list[str]:
+    """Inclusive list of YYYY-MM keys from ``start`` to ``end`` (gap-filled)."""
+    start_year, start_month = (int(part) for part in start.split("-"))
+    end_year, end_month = (int(part) for part in end.split("-"))
+    keys: list[str] = []
+    year, month = start_year, start_month
+    while (year, month) <= (end_year, end_month):
+        keys.append(f"{year:04d}-{month:02d}")
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return keys
+
+
+def _direction(delta: Decimal) -> Direction:
+    if delta > 0:
+        return "up"
+    if delta < 0:
+        return "down"
+    return "flat"
+
+
+def _monthly_series(month_keys: list[str], amounts: dict[str, Decimal]) -> list[MonthlyPoint]:
+    """Build a MonthlyPoint series over ``month_keys`` from monthly ``amounts``."""
+    points: list[MonthlyPoint] = []
+    prev: Decimal | None = None
+    for month in month_keys:
+        amount = _to_cents(amounts.get(month, Decimal(0)))
+        if prev is None:
+            point = MonthlyPoint(month, amount, Decimal("0.00"), None, "flat")
+        else:
+            delta = amount - prev
+            pct = None
+            if prev > 0:
+                pct = (delta / prev * _HUNDRED).quantize(_CENTS, rounding=ROUND_HALF_UP)
+            point = MonthlyPoint(month, amount, delta, pct, _direction(delta))
+        points.append(point)
+        prev = amount
+    return points
+
+
+def trends(
+    transactions: list[Transaction],
+    *,
+    category: str | None = None,
+    months: int | None = None,
+) -> SpendingTrends:
+    """Compute month-over-month spend trends, overall and per category.
+
+    Months are gap-filled across the full range, so a category that disappears
+    shows a drop to 0 and a new category rises from 0. ``category`` restricts the
+    whole computation to one category; ``months`` keeps only the most recent N
+    months (applied after deltas, so the window's first month keeps its true
+    delta). Credits are excluded; no-spend input returns empty series.
+    """
+    debits = [
+        t for t in transactions if t.amount < 0 and (category is None or t.category == category)
+    ]
+    if not debits:
+        return SpendingTrends(overall=[], by_category=[])
+
+    overall_amounts: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    per_category: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: defaultdict(lambda: Decimal(0))
+    )
+    for t in debits:
+        overall_amounts[t.month] += -t.amount
+        per_category[t.category][t.month] += -t.amount
+
+    month_keys = _month_range(min(overall_amounts), max(overall_amounts))
+
+    def window(points: list[MonthlyPoint]) -> list[MonthlyPoint]:
+        return points[-months:] if months is not None else points
+
+    overall = window(_monthly_series(month_keys, overall_amounts))
+    by_category = [
+        CategoryTrend(category=cat, points=window(_monthly_series(month_keys, amounts)))
+        for cat, amounts in sorted(per_category.items())
+    ]
+    return SpendingTrends(overall=overall, by_category=by_category)

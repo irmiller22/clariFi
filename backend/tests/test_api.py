@@ -178,3 +178,24 @@ class TestTimelineEndpoint:
     async def test_rejects_invalid_granularity(self, client: AsyncClient) -> None:
         response = await client.get("/api/analytics/timeline", params={"granularity": "yearly"})
         assert response.status_code == 422
+
+
+class TestTrendsEndpoint:
+    async def test_empty_store_returns_empty_series(self, client: AsyncClient) -> None:
+        body = (await client.get("/api/analytics/trends")).json()
+        assert body == {"overall": [], "byCategory": []}
+
+    async def test_returns_camelcase_trend_shape(self, client: AsyncClient) -> None:
+        # All sample rows are January -> a single overall month, flat (no prior).
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/trends")).json()
+        assert len(body["overall"]) == 1
+        point = body["overall"][0]
+        assert point["month"] == "2025-01"
+        assert point["amount"] == 90.00
+        assert point["pctChange"] is None
+        assert point["direction"] == "flat"
+
+    async def test_rejects_non_positive_months(self, client: AsyncClient) -> None:
+        response = await client.get("/api/analytics/trends", params={"months": 0})
+        assert response.status_code == 422

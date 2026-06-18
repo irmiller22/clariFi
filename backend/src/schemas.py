@@ -114,6 +114,34 @@ class TimelinePointRead(BaseModel):
     cumulative: float
 
 
+class MonthlyTrendRead(BaseModel):
+    """One month in a spend trend series. Serialized with camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    month: str
+    amount: float
+    delta: float
+    pct_change: float | None
+    direction: str
+
+
+class CategoryTrendRead(BaseModel):
+    """A per-category monthly trend series."""
+
+    category: str
+    points: list[MonthlyTrendRead]
+
+
+class SpendingTrendsRead(BaseModel):
+    """Month-over-month trends, overall and by category. camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    overall: list[MonthlyTrendRead]
+    by_category: list[CategoryTrendRead]
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 
