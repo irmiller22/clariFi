@@ -8,6 +8,7 @@ from src.schemas import (
     AnalyticsSummary,
     CategorySpendingRead,
     CategoryTrendRead,
+    MerchantSpendingRead,
     MonthlyTrendRead,
     SpendingTrendsRead,
     TimelinePointRead,
@@ -18,13 +19,16 @@ from src.schemas import (
 from src.services.analytics import (
     CategorySpending,
     Granularity,
+    MerchantSpending,
     MonthlyPoint,
+    RankBy,
     SpendingSummary,
     SpendingTrends,
     TimelinePoint,
     spending_by_category,
     spending_timeline,
     summarize,
+    top_merchants,
     trends,
 )
 from src.services.csv_parser import CSVParseError, CSVParser
@@ -100,6 +104,15 @@ def _monthly_trend_dto(point: MonthlyPoint) -> MonthlyTrendRead:
         delta=float(point.delta),
         pct_change=None if point.pct_change is None else float(point.pct_change),
         direction=point.direction,
+    )
+
+
+def _merchant_dto(merchant: MerchantSpending) -> MerchantSpendingRead:
+    """Convert a Decimal merchant aggregate into the float-valued response DTO."""
+    return MerchantSpendingRead(
+        merchant=merchant.merchant,
+        amount=float(merchant.amount),
+        count=merchant.count,
     )
 
 
@@ -218,3 +231,13 @@ async def get_trends_analytics(
         months=months,
     )
     return _trends_dto(result)
+
+
+@app.get("/api/analytics/top-merchants")
+async def get_top_merchants(
+    limit: int = Query(default=10, ge=1),
+    by: RankBy = "spend",
+) -> list[MerchantSpendingRead]:
+    """Top merchants ranked by spend (default) or transaction count."""
+    result = top_merchants([s.transaction for s in store.all()], limit=limit, by=by)
+    return [_merchant_dto(m) for m in result]

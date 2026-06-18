@@ -142,6 +142,14 @@ class SpendingTrendsRead(BaseModel):
     by_category: list[CategoryTrendRead]
 
 
+class MerchantSpendingRead(BaseModel):
+    """A single merchant's total spend, as returned to the client."""
+
+    merchant: str
+    amount: float
+    count: int
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 

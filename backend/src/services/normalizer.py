@@ -13,6 +13,10 @@ from src.domain import Transaction
 from src.schemas import TransactionCreate
 
 _WHITESPACE_RE = re.compile(r"\s+")
+# Leading payment-processor prefix, e.g. "SQ *", "TST*", "PYPL *".
+_PROCESSOR_PREFIX_RE = re.compile(r"^\S{1,6}\s*\*\s*")
+# A trailing store-number / reference token, e.g. "#1234" or a bare digit run.
+_TRAILING_NUMBER_RE = re.compile(r"^#?\d{2,}$")
 
 
 def _parse_date(value: str) -> date:
@@ -38,13 +42,23 @@ def _collapse_whitespace(text: str) -> str:
 
 
 def _normalize_merchant(description: str) -> str:
-    """Lightly normalize a merchant string from the description.
+    """Canonicalize a merchant name so the same merchant aggregates together.
 
-    For now this is just whitespace normalization. Deeper canonicalization
-    (stripping store numbers, city/state suffixes, so the same merchant
-    aggregates together) is handled by the top-merchants analytics (LAT-78).
+    Heuristics (applied to the whitespace-collapsed description):
+    - strip a leading payment-processor prefix (``SQ *``, ``TST*``, ``PYPL *``);
+    - strip trailing store-number / reference tokens (``#1234`` or bare digit
+      runs like a pump or terminal id).
+
+    This intentionally does not attempt city/state stripping — that's ambiguous
+    and risks mangling real names; store numbers and processor prefixes cover the
+    common "same merchant, different suffix" cases. Falls back to the collapsed
+    description if stripping would leave nothing.
     """
-    return _collapse_whitespace(description)
+    text = _PROCESSOR_PREFIX_RE.sub("", _collapse_whitespace(description))
+    tokens = text.split()
+    while len(tokens) > 1 and _TRAILING_NUMBER_RE.match(tokens[-1]):
+        tokens.pop()
+    return " ".join(tokens) or _collapse_whitespace(description)
 
 
 def normalize(row: TransactionCreate) -> Transaction:

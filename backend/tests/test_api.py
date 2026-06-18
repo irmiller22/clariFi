@@ -199,3 +199,28 @@ class TestTrendsEndpoint:
     async def test_rejects_non_positive_months(self, client: AsyncClient) -> None:
         response = await client.get("/api/analytics/trends", params={"months": 0})
         assert response.status_code == 422
+
+
+class TestTopMerchantsEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        body = (await client.get("/api/analytics/top-merchants")).json()
+        assert body == []
+
+    async def test_ranks_by_spend_excluding_income(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/top-merchants")).json()
+        # PAYROLL is a credit -> excluded; spend ranks WHOLE FOODS (50) over SHELL GAS (40).
+        assert [m["merchant"] for m in body] == ["WHOLE FOODS", "SHELL GAS"]
+        assert body[0]["amount"] == 50.00
+        assert body[0]["count"] == 1
+
+    async def test_limit_and_by_count_params(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (
+            await client.get("/api/analytics/top-merchants", params={"limit": 1, "by": "count"})
+        ).json()
+        assert len(body) == 1
+
+    async def test_rejects_invalid_by(self, client: AsyncClient) -> None:
+        response = await client.get("/api/analytics/top-merchants", params={"by": "alphabetical"})
+        assert response.status_code == 422
