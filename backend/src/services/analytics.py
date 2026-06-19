@@ -34,6 +34,14 @@ _CADENCES: tuple[tuple[Cadence, int, int], ...] = (
 # Allowed spread of charge amounts, as a fraction of their mean (5%).
 _AMOUNT_TOLERANCE_RATIO = Decimal("0.05")
 
+# --- Anomaly / rolling-average thresholds -----------------------------------
+# A category needs at least this many charges before we'll judge what's normal.
+_ANOMALY_MIN_HISTORY = 4
+# A spend above this multiple of the category median is flagged as anomalous.
+_ANOMALY_MULTIPLIER = Decimal(3)
+# Default trailing window (in months) for the moving average.
+_DEFAULT_ROLLING_WINDOW = 3
+
 
 def _to_cents(value: Decimal) -> Decimal:
     """Quantize a monetary value to cents using round-half-up."""
@@ -416,3 +424,134 @@ def recurring_charges(transactions: list[Transaction]) -> list[RecurringCharge]:
         )
     charges.sort(key=lambda c: c.typical_amount, reverse=True)
     return charges
+
+
+@dataclass(frozen=True)
+class Anomaly:
+    """A spend that is unusually large for its category."""
+
+    transaction_date: date
+    description: str
+    category: str
+    amount: Decimal
+    category_median: Decimal
+
+
+def detect_anomalies(transactions: list[Transaction]) -> list[Anomaly]:
+    """Flag spends well above their category's norm, sorted by amount desc.
+
+    The norm is the category's median spend (robust — a single outlier doesn't
+    drag it the way it would a mean); a transaction is anomalous when its amount
+    exceeds ``_ANOMALY_MULTIPLIER`` times that median. Categories with fewer than
+    ``_ANOMALY_MIN_HISTORY`` spends are skipped (too little history to judge).
+    """
+    by_category: dict[str, list[Transaction]] = defaultdict(list)
+    for t in transactions:
+        if t.amount < 0:
+            by_category[t.category].append(t)
+
+    anomalies: list[Anomaly] = []
+    for category, txns in by_category.items():
+        if len(txns) < _ANOMALY_MIN_HISTORY:
+            continue
+        amounts = [-t.amount for t in txns]
+        median = _median(amounts)
+        threshold = median * _ANOMALY_MULTIPLIER
+        for t in txns:
+            amount = -t.amount
+            if amount > threshold:
+                anomalies.append(
+                    Anomaly(
+                        transaction_date=t.transaction_date,
+                        description=t.description,
+                        category=category,
+                        amount=_to_cents(amount),
+                        category_median=_to_cents(median),
+                    )
+                )
+    anomalies.sort(key=lambda a: a.amount, reverse=True)
+    return anomalies
+
+
+@dataclass(frozen=True)
+class RollingAveragePoint:
+    """Monthly spend alongside its trailing moving average."""
+
+    month: str
+    spend: Decimal
+    moving_average: Decimal
+
+
+def _monthly_outflows(transactions: list[Transaction]) -> dict[str, Decimal]:
+    monthly: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    for t in transactions:
+        if t.amount < 0:
+            monthly[t.month] += -t.amount
+    return monthly
+
+
+def rolling_average(
+    transactions: list[Transaction], window: int = _DEFAULT_ROLLING_WINDOW
+) -> list[RollingAveragePoint]:
+    """Trailing moving average of monthly spend over ``window`` months.
+
+    Months are gap-filled across the full range; the average for each month
+    covers up to the previous ``window`` months (fewer near the start). No-spend
+    input returns [].
+    """
+    monthly = _monthly_outflows(transactions)
+    if not monthly:
+        return []
+    months = _month_range(min(monthly), max(monthly))
+    spends = [monthly.get(month, Decimal(0)) for month in months]
+
+    points: list[RollingAveragePoint] = []
+    for index, month in enumerate(months):
+        window_values = spends[max(0, index - window + 1) : index + 1]
+        average = sum(window_values, Decimal(0)) / len(window_values)
+        points.append(RollingAveragePoint(month, _to_cents(spends[index]), _to_cents(average)))
+    return points
+
+
+@dataclass(frozen=True)
+class CashflowPoint:
+    """Income vs spend for a month, and the net (income - spend)."""
+
+    month: str
+    income: Decimal
+    spend: Decimal
+    net: Decimal
+
+
+def cashflow(transactions: list[Transaction]) -> list[CashflowPoint]:
+    """Monthly income, spend, and net over time (gap-filled).
+
+    ``income`` sums inflows (credits), ``spend`` sums outflows as a positive
+    magnitude, and ``net`` is ``income - spend`` (negative = net outflow).
+    No transactions returns [].
+    """
+    income: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    spend: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    for t in transactions:
+        if t.amount > 0:
+            income[t.month] += t.amount
+        elif t.amount < 0:
+            spend[t.month] += -t.amount
+
+    active_months = set(income) | set(spend)
+    if not active_months:
+        return []
+
+    points: list[CashflowPoint] = []
+    for month in _month_range(min(active_months), max(active_months)):
+        month_income = income.get(month, Decimal(0))
+        month_spend = spend.get(month, Decimal(0))
+        points.append(
+            CashflowPoint(
+                month=month,
+                income=_to_cents(month_income),
+                spend=_to_cents(month_spend),
+                net=_to_cents(month_income - month_spend),
+            )
+        )
+    return points

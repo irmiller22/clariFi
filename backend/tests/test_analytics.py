@@ -6,7 +6,10 @@ from decimal import Decimal
 from src.domain import Transaction
 from src.services.analytics import (
     SpendingSummary,
+    cashflow,
+    detect_anomalies,
     recurring_charges,
+    rolling_average,
     spending_by_category,
     spending_timeline,
     summarize,
@@ -389,3 +392,82 @@ class TestRecurringCharges:
     def test_credits_ignored(self) -> None:
         txns = _monthly("Refunds", ["12.00", "12.00", "12.00"])  # positive -> credits
         assert recurring_charges(txns) == []
+
+
+class TestDetectAnomalies:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert detect_anomalies([]) == []
+
+    def test_clear_outlier_is_flagged(self) -> None:
+        txns = [
+            _tx("-20.00", category="Food"),
+            _tx("-20.00", category="Food"),
+            _tx("-20.00", category="Food"),
+            _tx("-20.00", category="Food"),
+            _tx("-200.00", category="Food", merchant="Splurge"),
+        ]
+        result = detect_anomalies(txns)
+        assert len(result) == 1
+        assert result[0].amount == Decimal("200.00")
+        assert result[0].category == "Food"
+        assert result[0].category_median == Decimal("20.00")
+
+    def test_normal_spend_not_flagged(self) -> None:
+        txns = [_tx("-20.00", category="Food") for _ in range(5)]
+        assert detect_anomalies(txns) == []
+
+    def test_small_category_history_is_skipped(self) -> None:
+        # Only 2 charges -> not enough history to judge, even with a big one.
+        txns = [_tx("-20.00", category="Food"), _tx("-200.00", category="Food")]
+        assert detect_anomalies(txns) == []
+
+    def test_credits_ignored(self) -> None:
+        txns = [_tx("500.00", category="Income") for _ in range(5)]
+        assert detect_anomalies(txns) == []
+
+
+class TestRollingAverage:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert rolling_average([]) == []
+
+    def test_trailing_window_average(self) -> None:
+        # Monthly spend 30, 60, 90 over Jan-Mar; window=2 trailing average.
+        txns = _monthly("M", ["-30.00", "-60.00", "-90.00"])
+        result = rolling_average(txns, window=2)
+        assert [(p.month, p.spend, p.moving_average) for p in result] == [
+            ("2025-01", Decimal("30.00"), Decimal("30.00")),  # only Jan
+            ("2025-02", Decimal("60.00"), Decimal("45.00")),  # (30+60)/2
+            ("2025-03", Decimal("90.00"), Decimal("75.00")),  # (60+90)/2
+        ]
+
+    def test_gap_filled_months_count_as_zero(self) -> None:
+        txns = [
+            _tx("-30.00", merchant="M", on=date(2025, 1, 1)),
+            _tx("-30.00", merchant="M", on=date(2025, 3, 1)),
+        ]
+        result = rolling_average(txns, window=3)
+        # Feb is gap-filled at 0; Mar average = (30 + 0 + 30) / 3 = 20.
+        assert [p.month for p in result] == ["2025-01", "2025-02", "2025-03"]
+        assert result[2].moving_average == Decimal("20.00")
+
+
+class TestCashflow:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert cashflow([]) == []
+
+    def test_income_spend_and_net_per_month(self) -> None:
+        txns = [
+            _tx("2000.00", category="Income", on=date(2025, 1, 5)),
+            _tx("-90.00", category="Food", on=date(2025, 1, 6)),
+        ]
+        result = cashflow(txns)
+        assert len(result) == 1
+        point = result[0]
+        assert point.income == Decimal("2000.00")
+        assert point.spend == Decimal("90.00")
+        assert point.net == Decimal("1910.00")
+
+    def test_net_outflow_is_negative(self) -> None:
+        result = cashflow([_tx("-50.00", on=date(2025, 1, 1))])
+        assert result[0].income == Decimal("0.00")
+        assert result[0].net == Decimal("-50.00")

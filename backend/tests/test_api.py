@@ -249,3 +249,53 @@ class TestRecurringEndpoint:
         assert charge["occurrences"] == 3
         assert charge["lastDate"] == "03/01/2025"
         assert charge["nextExpectedDate"] == "04/01/2025"
+
+
+_ANOMALY_CSV = [
+    "01/01/2025,01/02/2025,CAFE A,Food,Sale,-20.00,",
+    "01/02/2025,01/03/2025,CAFE B,Food,Sale,-20.00,",
+    "01/03/2025,01/04/2025,CAFE C,Food,Sale,-20.00,",
+    "01/04/2025,01/05/2025,CAFE D,Food,Sale,-20.00,",
+    "01/05/2025,01/06/2025,FANCY DINNER,Food,Sale,-200.00,",
+]
+
+
+class TestAnomaliesEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        assert (await client.get("/api/analytics/anomalies")).json() == []
+
+    async def test_flags_large_outlier(self, client: AsyncClient) -> None:
+        await _upload(client, _csv(_ANOMALY_CSV))
+        body = (await client.get("/api/analytics/anomalies")).json()
+        assert len(body) == 1
+        assert body[0]["amount"] == 200.00
+        assert body[0]["categoryMedian"] == 20.00
+
+
+class TestRollingAverageEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        assert (await client.get("/api/analytics/rolling-average")).json() == []
+
+    async def test_returns_monthly_points(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/rolling-average")).json()
+        assert len(body) == 1
+        assert body[0]["spend"] == 90.00
+        assert body[0]["movingAverage"] == 90.00
+
+    async def test_rejects_non_positive_window(self, client: AsyncClient) -> None:
+        response = await client.get("/api/analytics/rolling-average", params={"window": 0})
+        assert response.status_code == 422
+
+
+class TestCashflowEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        assert (await client.get("/api/analytics/cashflow")).json() == []
+
+    async def test_income_spend_net(self, client: AsyncClient) -> None:
+        await _upload(client, _csv())
+        body = (await client.get("/api/analytics/cashflow")).json()
+        assert len(body) == 1
+        assert body[0]["income"] == 2000.00
+        assert body[0]["spend"] == 90.00
+        assert body[0]["net"] == 1910.00
