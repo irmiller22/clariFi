@@ -150,6 +150,19 @@ class MerchantSpendingRead(BaseModel):
     count: int
 
 
+class RecurringChargeRead(BaseModel):
+    """A detected recurring charge, as returned to the client. camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    merchant: str
+    cadence: str
+    typical_amount: float
+    occurrences: int
+    last_date: str
+    next_expected_date: str
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 

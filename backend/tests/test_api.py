@@ -224,3 +224,28 @@ class TestTopMerchantsEndpoint:
     async def test_rejects_invalid_by(self, client: AsyncClient) -> None:
         response = await client.get("/api/analytics/top-merchants", params={"by": "alphabetical"})
         assert response.status_code == 422
+
+
+_RECURRING_CSV = [
+    "01/01/2025,01/02/2025,NETFLIX,Entertainment,Sale,-15.99,",
+    "02/01/2025,02/02/2025,NETFLIX,Entertainment,Sale,-15.99,",
+    "03/01/2025,03/02/2025,NETFLIX,Entertainment,Sale,-15.99,",
+]
+
+
+class TestRecurringEndpoint:
+    async def test_empty_store_returns_empty_list(self, client: AsyncClient) -> None:
+        body = (await client.get("/api/analytics/recurring")).json()
+        assert body == []
+
+    async def test_detects_monthly_subscription(self, client: AsyncClient) -> None:
+        await _upload(client, _csv(_RECURRING_CSV))
+        body = (await client.get("/api/analytics/recurring")).json()
+        assert len(body) == 1
+        charge = body[0]
+        assert charge["merchant"] == "NETFLIX"
+        assert charge["cadence"] == "monthly"
+        assert charge["typicalAmount"] == 15.99
+        assert charge["occurrences"] == 3
+        assert charge["lastDate"] == "03/01/2025"
+        assert charge["nextExpectedDate"] == "04/01/2025"

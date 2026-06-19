@@ -5,10 +5,12 @@ All monetary math here is exact ``Decimal`` arithmetic, quantized to cents with
 in this layer.
 """
 
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from itertools import pairwise
 from typing import Literal
 
 from src.domain import Transaction
@@ -19,6 +21,18 @@ _HUNDRED = Decimal(100)
 Granularity = Literal["day", "week", "month"]
 Direction = Literal["up", "down", "flat"]
 RankBy = Literal["spend", "count"]
+Cadence = Literal["weekly", "monthly"]
+
+# --- Recurring-charge detection thresholds ----------------------------------
+# A merchant needs at least this many charges before we'll call it recurring.
+_MIN_RECURRENCES = 3
+# Candidate cadences: (label, expected interval in days, ± tolerance in days).
+_CADENCES: tuple[tuple[Cadence, int, int], ...] = (
+    ("weekly", 7, 2),
+    ("monthly", 30, 5),
+)
+# Allowed spread of charge amounts, as a fraction of their mean (5%).
+_AMOUNT_TOLERANCE_RATIO = Decimal("0.05")
 
 
 def _to_cents(value: Decimal) -> Decimal:
@@ -319,3 +333,86 @@ def top_merchants(
     else:
         merchants.sort(key=lambda m: (m.amount, m.count), reverse=True)
     return merchants[:limit]
+
+
+@dataclass(frozen=True)
+class RecurringCharge:
+    """A merchant whose charges recur on a regular cadence with stable amounts."""
+
+    merchant: str
+    cadence: Cadence
+    typical_amount: Decimal
+    occurrences: int
+    last_date: date
+    next_expected_date: date
+
+
+def _detect_cadence(intervals: list[int]) -> Cadence | None:
+    """Return the cadence whose window contains *every* interval, if any."""
+    for cadence, days, tolerance in _CADENCES:
+        if all(days - tolerance <= interval <= days + tolerance for interval in intervals):
+            return cadence
+    return None
+
+
+def _amounts_are_stable(amounts: list[Decimal]) -> bool:
+    """True when the amounts vary by at most the allowed fraction of their mean."""
+    mean = sum(amounts, Decimal(0)) / len(amounts)
+    return mean > 0 and (max(amounts) - min(amounts)) <= _AMOUNT_TOLERANCE_RATIO * mean
+
+
+def _median(values: list[Decimal]) -> Decimal:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _advance(day: date, cadence: Cadence) -> date:
+    """Project the next expected charge date for a cadence."""
+    if cadence == "weekly":
+        return day + timedelta(days=7)
+    year = day.year + 1 if day.month == 12 else day.year
+    month = 1 if day.month == 12 else day.month + 1
+    return date(year, month, min(day.day, monthrange(year, month)[1]))
+
+
+def recurring_charges(transactions: list[Transaction]) -> list[RecurringCharge]:
+    """Detect recurring charges / subscriptions, sorted by amount descending.
+
+    A merchant is recurring when it has at least ``_MIN_RECURRENCES`` outflows
+    whose consecutive intervals all fall within a single cadence window
+    (weekly or monthly) and whose amounts are stable (within
+    ``_AMOUNT_TOLERANCE_RATIO`` of their mean). Credits are ignored.
+    """
+    by_merchant: dict[str, list[Transaction]] = defaultdict(list)
+    for t in transactions:
+        if t.amount < 0:
+            by_merchant[t.merchant].append(t)
+
+    charges: list[RecurringCharge] = []
+    for merchant, txns in by_merchant.items():
+        if len(txns) < _MIN_RECURRENCES:
+            continue
+        ordered = sorted(txns, key=lambda t: t.transaction_date)
+        dates = [t.transaction_date for t in ordered]
+        intervals = [(later - earlier).days for earlier, later in pairwise(dates)]
+        cadence = _detect_cadence(intervals)
+        if cadence is None:
+            continue
+        amounts = [-t.amount for t in ordered]
+        if not _amounts_are_stable(amounts):
+            continue
+        charges.append(
+            RecurringCharge(
+                merchant=merchant,
+                cadence=cadence,
+                typical_amount=_to_cents(_median(amounts)),
+                occurrences=len(ordered),
+                last_date=dates[-1],
+                next_expected_date=_advance(dates[-1], cadence),
+            )
+        )
+    charges.sort(key=lambda c: c.typical_amount, reverse=True)
+    return charges
