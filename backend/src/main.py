@@ -10,6 +10,7 @@ from src.schemas import (
     CategoryTrendRead,
     MerchantSpendingRead,
     MonthlyTrendRead,
+    RecurringChargeRead,
     SpendingTrendsRead,
     TimelinePointRead,
     TransactionList,
@@ -22,9 +23,11 @@ from src.services.analytics import (
     MerchantSpending,
     MonthlyPoint,
     RankBy,
+    RecurringCharge,
     SpendingSummary,
     SpendingTrends,
     TimelinePoint,
+    recurring_charges,
     spending_by_category,
     spending_timeline,
     summarize,
@@ -113,6 +116,19 @@ def _merchant_dto(merchant: MerchantSpending) -> MerchantSpendingRead:
         merchant=merchant.merchant,
         amount=float(merchant.amount),
         count=merchant.count,
+    )
+
+
+def _recurring_dto(charge: RecurringCharge) -> RecurringChargeRead:
+    """Convert a Decimal recurring charge into the float-valued response DTO."""
+    last, nxt = charge.last_date, charge.next_expected_date
+    return RecurringChargeRead(
+        merchant=charge.merchant,
+        cadence=charge.cadence,
+        typical_amount=float(charge.typical_amount),
+        occurrences=charge.occurrences,
+        last_date=f"{last.month:02d}/{last.day:02d}/{last.year:04d}",
+        next_expected_date=f"{nxt.month:02d}/{nxt.day:02d}/{nxt.year:04d}",
     )
 
 
@@ -241,3 +257,10 @@ async def get_top_merchants(
     """Top merchants ranked by spend (default) or transaction count."""
     result = top_merchants([s.transaction for s in store.all()], limit=limit, by=by)
     return [_merchant_dto(m) for m in result]
+
+
+@app.get("/api/analytics/recurring")
+async def get_recurring_charges() -> list[RecurringChargeRead]:
+    """Detected recurring charges / subscriptions for the current set."""
+    result = recurring_charges([s.transaction for s in store.all()])
+    return [_recurring_dto(c) for c in result]

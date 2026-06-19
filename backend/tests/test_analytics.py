@@ -6,6 +6,7 @@ from decimal import Decimal
 from src.domain import Transaction
 from src.services.analytics import (
     SpendingSummary,
+    recurring_charges,
     spending_by_category,
     spending_timeline,
     summarize,
@@ -329,3 +330,62 @@ class TestTopMerchants:
             limit=2,
         )
         assert [m.merchant for m in result] == ["A", "B"]
+
+
+def _monthly(merchant: str, amounts: list[str], start_month: int = 1) -> list[Transaction]:
+    """Build one charge per month (on the 1st) for a merchant."""
+    return [
+        _tx(amt, merchant=merchant, on=date(2025, start_month + i, 1))
+        for i, amt in enumerate(amounts)
+    ]
+
+
+class TestRecurringCharges:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert recurring_charges([]) == []
+
+    def test_clean_monthly_subscription_detected(self) -> None:
+        result = recurring_charges(_monthly("Netflix", ["-15.99", "-15.99", "-15.99"]))
+        assert len(result) == 1
+        charge = result[0]
+        assert charge.merchant == "Netflix"
+        assert charge.cadence == "monthly"
+        assert charge.typical_amount == Decimal("15.99")
+        assert charge.occurrences == 3
+        assert charge.last_date == date(2025, 3, 1)
+        assert charge.next_expected_date == date(2025, 4, 1)
+
+    def test_weekly_subscription_detected(self) -> None:
+        txns = [
+            _tx("-10.00", merchant="Gym", on=date(2025, 1, 6)),
+            _tx("-10.00", merchant="Gym", on=date(2025, 1, 13)),
+            _tx("-10.00", merchant="Gym", on=date(2025, 1, 20)),
+        ]
+        result = recurring_charges(txns)
+        assert len(result) == 1
+        assert result[0].cadence == "weekly"
+        assert result[0].next_expected_date == date(2025, 1, 27)
+
+    def test_irregular_merchant_not_flagged(self) -> None:
+        txns = [
+            _tx("-10.00", merchant="Shop", on=date(2025, 1, 1)),
+            _tx("-10.00", merchant="Shop", on=date(2025, 1, 5)),
+            _tx("-10.00", merchant="Shop", on=date(2025, 3, 20)),
+        ]
+        assert recurring_charges(txns) == []
+
+    def test_amount_drift_within_tolerance_detected(self) -> None:
+        # ~3% spread on a ~10 mean stays under the 5% tolerance.
+        result = recurring_charges(_monthly("Spotify", ["-10.00", "-10.20", "-9.90"]))
+        assert len(result) == 1
+        assert result[0].merchant == "Spotify"
+
+    def test_amount_drift_outside_tolerance_not_flagged(self) -> None:
+        assert recurring_charges(_monthly("Variable", ["-10.00", "-20.00", "-10.00"])) == []
+
+    def test_too_few_occurrences_not_flagged(self) -> None:
+        assert recurring_charges(_monthly("Twice", ["-9.99", "-9.99"])) == []
+
+    def test_credits_ignored(self) -> None:
+        txns = _monthly("Refunds", ["12.00", "12.00", "12.00"])  # positive -> credits
+        assert recurring_charges(txns) == []
