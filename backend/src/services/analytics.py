@@ -18,6 +18,7 @@ _HUNDRED = Decimal(100)
 
 Granularity = Literal["day", "week", "month"]
 Direction = Literal["up", "down", "flat"]
+RankBy = Literal["spend", "count"]
 
 
 def _to_cents(value: Decimal) -> Decimal:
@@ -276,3 +277,45 @@ def trends(
         for cat, amounts in sorted(per_category.items())
     ]
     return SpendingTrends(overall=overall, by_category=by_category)
+
+
+@dataclass(frozen=True)
+class MerchantSpending:
+    """Total spend at a single (canonicalized) merchant."""
+
+    merchant: str
+    amount: Decimal
+    count: int
+
+
+def top_merchants(
+    transactions: list[Transaction],
+    *,
+    limit: int = 10,
+    by: RankBy = "spend",
+) -> list[MerchantSpending]:
+    """Rank merchants by total spend (default) or transaction frequency.
+
+    Groups outflows by the canonicalized ``merchant`` (see the normalizer), so
+    the same merchant with different store-number suffixes aggregates together.
+    Ties break on the other metric. Credits are excluded; returns at most
+    ``limit`` entries, and [] when there is no spend.
+    """
+    sums: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    counts: dict[str, int] = defaultdict(int)
+    for t in transactions:
+        if t.amount < 0:
+            sums[t.merchant] += -t.amount
+            counts[t.merchant] += 1
+    if not sums:
+        return []
+
+    merchants = [
+        MerchantSpending(merchant=merchant, amount=_to_cents(amount), count=counts[merchant])
+        for merchant, amount in sums.items()
+    ]
+    if by == "count":
+        merchants.sort(key=lambda m: (m.count, m.amount), reverse=True)
+    else:
+        merchants.sort(key=lambda m: (m.amount, m.count), reverse=True)
+    return merchants[:limit]

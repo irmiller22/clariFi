@@ -9,16 +9,22 @@ from src.services.analytics import (
     spending_by_category,
     spending_timeline,
     summarize,
+    top_merchants,
     trends,
 )
 
 
-def _tx(amount: str, category: str = "Misc", on: date = date(2025, 1, 1)) -> Transaction:
+def _tx(
+    amount: str,
+    category: str = "Misc",
+    on: date = date(2025, 1, 1),
+    merchant: str = "x",
+) -> Transaction:
     return Transaction(
         transaction_date=on,
         post_date=on,
         description="x",
-        merchant="x",
+        merchant=merchant,
         category=category,
         source_type="Sale",
         amount=Decimal(amount),
@@ -278,3 +284,48 @@ class TestTrends:
         )
         assert [c.category for c in result.by_category] == ["Food"]
         assert result.overall[0].amount == Decimal("100.00")
+
+
+class TestTopMerchants:
+    def test_empty_set_returns_empty_list(self) -> None:
+        assert top_merchants([]) == []
+
+    def test_only_credits_returns_empty_list(self) -> None:
+        assert top_merchants([_tx("100.00", merchant="Payroll")]) == []
+
+    def test_aggregates_and_ranks_by_spend(self) -> None:
+        result = top_merchants(
+            [
+                _tx("-100.00", merchant="Amazon"),
+                _tx("-20.00", merchant="Cafe"),
+                _tx("-20.00", merchant="Cafe"),
+                _tx("-20.00", merchant="Cafe"),
+            ]
+        )
+        assert [(m.merchant, m.amount, m.count) for m in result] == [
+            ("Amazon", Decimal("100.00"), 1),
+            ("Cafe", Decimal("60.00"), 3),
+        ]
+
+    def test_rank_by_count(self) -> None:
+        result = top_merchants(
+            [
+                _tx("-100.00", merchant="Amazon"),
+                _tx("-20.00", merchant="Cafe"),
+                _tx("-20.00", merchant="Cafe"),
+                _tx("-20.00", merchant="Cafe"),
+            ],
+            by="count",
+        )
+        assert [m.merchant for m in result] == ["Cafe", "Amazon"]
+
+    def test_limit_caps_results(self) -> None:
+        result = top_merchants(
+            [
+                _tx("-90.00", merchant="A"),
+                _tx("-50.00", merchant="B"),
+                _tx("-10.00", merchant="C"),
+            ],
+            limit=2,
+        )
+        assert [m.merchant for m in result] == ["A", "B"]

@@ -72,11 +72,38 @@ class TestStringNormalization:
 
     def test_collapses_whitespace(self) -> None:
         tx = normalize(_row(description="SQ   *CLEVER    BARBER"))
+        # description keeps the original text (whitespace-collapsed); merchant is
+        # canonicalized (processor prefix stripped).
         assert tx.description == "SQ *CLEVER BARBER"
-        assert tx.merchant == "SQ *CLEVER BARBER"
+        assert tx.merchant == "CLEVER BARBER"
 
     def test_none_memo_becomes_empty_string(self) -> None:
         assert normalize(_row(memo=None)).memo == ""
+
+
+class TestMerchantCanonicalization:
+    """The merchant field strips processor prefixes and store numbers."""
+
+    def test_strips_processor_prefix(self) -> None:
+        assert normalize(_row(description="TST* RESTAURANT NAME")).merchant == "RESTAURANT NAME"
+
+    def test_strips_trailing_store_number(self) -> None:
+        assert normalize(_row(description="WHOLEFDS MKT #123")).merchant == "WHOLEFDS MKT"
+
+    def test_strips_trailing_digit_run(self) -> None:
+        assert normalize(_row(description="SHELL OIL 57442197503")).merchant == "SHELL OIL"
+
+    def test_same_merchant_different_store_numbers_match(self) -> None:
+        a = normalize(_row(description="STARBUCKS STORE #111")).merchant
+        b = normalize(_row(description="STARBUCKS STORE #222")).merchant
+        assert a == b == "STARBUCKS STORE"
+
+    def test_clean_name_is_unchanged(self) -> None:
+        assert normalize(_row(description="TARGET")).merchant == "TARGET"
+
+    def test_alphanumeric_reference_is_left_alone(self) -> None:
+        # Not a pure digit run, so it's preserved (avoids over-stripping).
+        assert normalize(_row(description="MCDONALDS F1234")).merchant == "MCDONALDS F1234"
 
 
 class TestNormalizeMany:
