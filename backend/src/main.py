@@ -6,11 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.domain import TransactionType
 from src.schemas import (
     AnalyticsSummary,
+    AnomalyRead,
+    CashflowRead,
     CategorySpendingRead,
     CategoryTrendRead,
     MerchantSpendingRead,
     MonthlyTrendRead,
     RecurringChargeRead,
+    RollingAverageRead,
     SpendingTrendsRead,
     TimelinePointRead,
     TransactionList,
@@ -18,16 +21,22 @@ from src.schemas import (
     UploadResult,
 )
 from src.services.analytics import (
+    Anomaly,
+    CashflowPoint,
     CategorySpending,
     Granularity,
     MerchantSpending,
     MonthlyPoint,
     RankBy,
     RecurringCharge,
+    RollingAveragePoint,
     SpendingSummary,
     SpendingTrends,
     TimelinePoint,
+    cashflow,
+    detect_anomalies,
     recurring_charges,
+    rolling_average,
     spending_by_category,
     spending_timeline,
     summarize,
@@ -129,6 +138,37 @@ def _recurring_dto(charge: RecurringCharge) -> RecurringChargeRead:
         occurrences=charge.occurrences,
         last_date=f"{last.month:02d}/{last.day:02d}/{last.year:04d}",
         next_expected_date=f"{nxt.month:02d}/{nxt.day:02d}/{nxt.year:04d}",
+    )
+
+
+def _anomaly_dto(anomaly: Anomaly) -> AnomalyRead:
+    """Convert a Decimal anomaly into the float-valued response DTO."""
+    d = anomaly.transaction_date
+    return AnomalyRead(
+        date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
+        description=anomaly.description,
+        category=anomaly.category,
+        amount=float(anomaly.amount),
+        category_median=float(anomaly.category_median),
+    )
+
+
+def _rolling_dto(point: RollingAveragePoint) -> RollingAverageRead:
+    """Convert a Decimal rolling-average point into the float-valued response DTO."""
+    return RollingAverageRead(
+        month=point.month,
+        spend=float(point.spend),
+        moving_average=float(point.moving_average),
+    )
+
+
+def _cashflow_dto(point: CashflowPoint) -> CashflowRead:
+    """Convert a Decimal cashflow point into the float-valued response DTO."""
+    return CashflowRead(
+        month=point.month,
+        income=float(point.income),
+        spend=float(point.spend),
+        net=float(point.net),
     )
 
 
@@ -264,3 +304,26 @@ async def get_recurring_charges() -> list[RecurringChargeRead]:
     """Detected recurring charges / subscriptions for the current set."""
     result = recurring_charges([s.transaction for s in store.all()])
     return [_recurring_dto(c) for c in result]
+
+
+@app.get("/api/analytics/anomalies")
+async def get_anomalies() -> list[AnomalyRead]:
+    """Transactions that are unusually large for their category."""
+    result = detect_anomalies([s.transaction for s in store.all()])
+    return [_anomaly_dto(a) for a in result]
+
+
+@app.get("/api/analytics/rolling-average")
+async def get_rolling_average(
+    window: int = Query(default=3, ge=1),
+) -> list[RollingAverageRead]:
+    """Monthly spend with a trailing moving average over ``window`` months."""
+    result = rolling_average([s.transaction for s in store.all()], window=window)
+    return [_rolling_dto(p) for p in result]
+
+
+@app.get("/api/analytics/cashflow")
+async def get_cashflow() -> list[CashflowRead]:
+    """Monthly income, spend, and net for the current transaction set."""
+    result = cashflow([s.transaction for s in store.all()])
+    return [_cashflow_dto(p) for p in result]

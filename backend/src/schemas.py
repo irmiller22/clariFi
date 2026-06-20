@@ -163,6 +163,37 @@ class RecurringChargeRead(BaseModel):
     next_expected_date: str
 
 
+class AnomalyRead(BaseModel):
+    """An unusually large spend, as returned to the client. camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    date: str
+    description: str
+    category: str
+    amount: float
+    category_median: float
+
+
+class RollingAverageRead(BaseModel):
+    """Monthly spend with its trailing moving average. camelCase keys."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    month: str
+    spend: float
+    moving_average: float
+
+
+class CashflowRead(BaseModel):
+    """Monthly income / spend / net, as returned to the client."""
+
+    month: str
+    income: float
+    spend: float
+    net: float
+
+
 class UploadResult(BaseModel):
     """Response for a successful CSV upload."""
 
