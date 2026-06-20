@@ -1,4 +1,16 @@
-import type { UploadResponse, Transaction, AnalyticsSummary } from "./types"
+import type {
+  UploadResponse,
+  Transaction,
+  AnalyticsSummary,
+  CategorySpending,
+  TimelineData,
+  SpendingTrends,
+  MerchantSpending,
+  RecurringCharge,
+  Anomaly,
+  RollingAverage,
+  Cashflow,
+} from "./types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -69,32 +81,59 @@ export const api = {
     return handleResponse<AnalyticsSummary>(response)
   },
 
-  async getCategoryAnalytics(): Promise<Array<{
-    category: string
-    amount: number
-    count: number
-    percentage: number
-  }>> {
+  async getCategoryAnalytics(): Promise<CategorySpending[]> {
     const response = await fetch(`${API_BASE_URL}/api/analytics/by-category`)
-    return handleResponse<Array<{
-      category: string
-      amount: number
-      count: number
-      percentage: number
-    }>>(response)
+    return handleResponse<CategorySpending[]>(response)
   },
 
-  async getTimelineAnalytics(): Promise<Array<{
-    date: string
-    amount: number
-    cumulative: number
-  }>> {
-    const response = await fetch(`${API_BASE_URL}/api/analytics/timeline`)
-    return handleResponse<Array<{
-      date: string
-      amount: number
-      cumulative: number
-    }>>(response)
+  async getTimelineAnalytics(
+    granularity: "day" | "week" | "month" = "month"
+  ): Promise<TimelineData[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/analytics/timeline?granularity=${granularity}`
+    )
+    return handleResponse<TimelineData[]>(response)
+  },
+
+  async getTrends(params?: { category?: string; months?: number }): Promise<SpendingTrends> {
+    const query = new URLSearchParams()
+    if (params?.category) query.set("category", params.category)
+    if (params?.months !== undefined) query.set("months", params.months.toString())
+    const response = await fetch(`${API_BASE_URL}/api/analytics/trends?${query.toString()}`)
+    return handleResponse<SpendingTrends>(response)
+  },
+
+  async getTopMerchants(params?: {
+    limit?: number
+    by?: "spend" | "count"
+  }): Promise<MerchantSpending[]> {
+    const query = new URLSearchParams()
+    if (params?.limit !== undefined) query.set("limit", params.limit.toString())
+    if (params?.by) query.set("by", params.by)
+    const response = await fetch(`${API_BASE_URL}/api/analytics/top-merchants?${query.toString()}`)
+    return handleResponse<MerchantSpending[]>(response)
+  },
+
+  async getRecurring(): Promise<RecurringCharge[]> {
+    const response = await fetch(`${API_BASE_URL}/api/analytics/recurring`)
+    return handleResponse<RecurringCharge[]>(response)
+  },
+
+  async getAnomalies(): Promise<Anomaly[]> {
+    const response = await fetch(`${API_BASE_URL}/api/analytics/anomalies`)
+    return handleResponse<Anomaly[]>(response)
+  },
+
+  async getRollingAverage(window = 3): Promise<RollingAverage[]> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/analytics/rolling-average?window=${window}`
+    )
+    return handleResponse<RollingAverage[]>(response)
+  },
+
+  async getCashflow(): Promise<Cashflow[]> {
+    const response = await fetch(`${API_BASE_URL}/api/analytics/cashflow`)
+    return handleResponse<Cashflow[]>(response)
   }
 }
 

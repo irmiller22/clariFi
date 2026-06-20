@@ -220,7 +220,9 @@ describe('API Client', () => {
 
       const result = await api.getTimelineAnalytics()
 
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/analytics/timeline')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8000/api/analytics/timeline?granularity=month'
+      )
       expect(result).toEqual(mockResponse)
     })
   })
