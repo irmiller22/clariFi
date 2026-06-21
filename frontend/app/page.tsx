@@ -124,7 +124,7 @@ export default function Home() {
                 Financial insights from your uploaded transactions
               </p>
             </div>
-            <AnalyticsDashboard transactions={transactions} summary={summary} />
+            <AnalyticsDashboard summary={summary} />
           </div>
         )}
       </main>
