@@ -35,6 +35,10 @@ htmlcov/
 .tox/
 .nox/
 
+# Benchmarks (baseline.json is committed; everything else is local/transient)
+.benchmarks/
+benchmarks/current.json
+
 # IDE
 .vscode/
 .idea/
