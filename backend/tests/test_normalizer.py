@@ -101,9 +101,28 @@ class TestMerchantCanonicalization:
     def test_clean_name_is_unchanged(self) -> None:
         assert normalize(_row(description="TARGET")).merchant == "TARGET"
 
-    def test_alphanumeric_reference_is_left_alone(self) -> None:
-        # Not a pure digit run, so it's preserved (avoids over-stripping).
-        assert normalize(_row(description="MCDONALDS F1234")).merchant == "MCDONALDS F1234"
+    def test_strips_alphanumeric_reference(self) -> None:
+        # A short letter+digits ref (e.g. a terminal id) is stripped.
+        assert normalize(_row(description="MCDONALDS F1234")).merchant == "MCDONALDS"
+
+    def test_strips_trailing_city_state_location(self) -> None:
+        assert normalize(_row(description="WHOLEFDS MKT AUSTIN TX")).merchant == "WHOLEFDS MKT"
+
+    def test_same_merchant_different_locations_match(self) -> None:
+        a = normalize(_row(description="STARBUCKS AUSTIN TX")).merchant
+        b = normalize(_row(description="STARBUCKS DALLAS TX")).merchant
+        assert a == b == "STARBUCKS"
+
+    def test_strips_store_number_city_and_state_together(self) -> None:
+        assert normalize(_row(description="STARBUCKS #5 AUSTIN TX")).merchant == "STARBUCKS"
+
+    def test_bare_location_is_not_emptied(self) -> None:
+        # Only a city+state with no name -> left intact rather than stripped away.
+        assert normalize(_row(description="AUSTIN TX")).merchant == "AUSTIN TX"
+
+    def test_non_location_two_letter_word_is_kept(self) -> None:
+        # A trailing word that isn't a US state code must not be dropped.
+        assert normalize(_row(description="JOES CRAB SHACK")).merchant == "JOES CRAB SHACK"
 
 
 class TestNormalizeMany:
