@@ -62,9 +62,9 @@ describe('Utility Functions', () => {
       expect(formatted).toMatch(/Jan 1[45], 2024/) // Accounting for timezone differences
     })
 
-    it('formats ISO date strings correctly', () => {
-      const formatted = formatDate('2024-01-15')
-      expect(formatted).toMatch(/Jan 1[45], 2024/) // Accounting for timezone differences
+    it('formats ISO date strings to the exact day (no timezone shift)', () => {
+      // UTC-anchored, so the rendered day matches the input regardless of TZ.
+      expect(formatDate('2024-01-15')).toBe('Jan 15, 2024')
     })
 
     it('formats MM/DD/YYYY strings correctly', () => {
@@ -73,8 +73,21 @@ describe('Utility Functions', () => {
     })
 
     it('handles different date formats', () => {
-      expect(formatDate('2024-12-25')).toMatch(/Dec 2[45], 2024/)
+      expect(formatDate('2024-12-25')).toBe('Dec 25, 2024')
       expect(formatDate('12/25/2024')).toMatch(/Dec 2[45], 2024/)
+    })
+
+    it('renders ISO date-only strings independent of timezone', () => {
+      // Regression for the UTC off-by-one: `new Date("2025-01-15")` is UTC
+      // midnight, which renders as the prior day in negative-offset zones.
+      const originalTZ = process.env.TZ
+      try {
+        process.env.TZ = 'America/Los_Angeles'
+        expect(formatDate('2025-01-15')).toBe('Jan 15, 2025')
+        expect(formatDate('2025-12-31')).toBe('Dec 31, 2025')
+      } finally {
+        process.env.TZ = originalTZ
+      }
     })
 
     it('handles edge cases', () => {

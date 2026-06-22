@@ -118,7 +118,7 @@ class TestGetTransactions:
     async def test_response_shape(self, client: AsyncClient) -> None:
         await _upload(client, _csv([SAMPLE_ROWS[0]]))
         txn = (await client.get("/api/transactions")).json()["transactions"][0]
-        assert txn["date"] == "01/05/2025"  # MM/DD/YYYY preserved
+        assert txn["date"] == "2025-01-05"  # ISO-8601
         assert txn["amount"] == -50.00  # JSON number, sign preserved
         assert txn["type"] == "debit"
 
@@ -163,7 +163,7 @@ class TestTimelineEndpoint:
         body = (await client.get("/api/analytics/timeline")).json()
         # All sample rows are in Jan 2025 -> one monthly bucket of the spend.
         assert len(body) == 1
-        assert body[0]["date"] == "01/01/2025"
+        assert body[0]["date"] == "2025-01-01"
         assert body[0]["amount"] == 90.00
         assert body[0]["cumulative"] == 90.00
 
@@ -172,7 +172,7 @@ class TestTimelineEndpoint:
         body = (await client.get("/api/analytics/timeline", params={"granularity": "day"})).json()
         # Spend on Jan 5 and Jan 10; Jan 6-9 gap-filled -> 6 daily points.
         assert len(body) == 6
-        assert body[0]["date"] == "01/05/2025"
+        assert body[0]["date"] == "2025-01-05"
         assert body[-1]["cumulative"] == 90.00
 
     async def test_rejects_invalid_granularity(self, client: AsyncClient) -> None:
@@ -247,8 +247,8 @@ class TestRecurringEndpoint:
         assert charge["cadence"] == "monthly"
         assert charge["typicalAmount"] == 15.99
         assert charge["occurrences"] == 3
-        assert charge["lastDate"] == "03/01/2025"
-        assert charge["nextExpectedDate"] == "04/01/2025"
+        assert charge["lastDate"] == "2025-03-01"
+        assert charge["nextExpectedDate"] == "2025-04-01"
 
 
 _ANOMALY_CSV = [
