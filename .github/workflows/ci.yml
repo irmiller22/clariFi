@@ -36,8 +36,8 @@ jobs:
           uv run ruff format --check .
           uv run mypy src
 
-      - name: Unit tests
-        run: uv run pytest tests/ -v
+      - name: Unit tests (with coverage gate)
+        run: uv run pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80
 
   frontend:
     name: Frontend (eslint + jest)
@@ -61,5 +61,5 @@ jobs:
       - name: Lint (eslint)
         run: npm run lint
 
-      - name: Unit tests
-        run: npm test
+      - name: Unit tests (with coverage gate)
+        run: npm test -- --coverage
