@@ -1,4 +1,4 @@
-.PHONY: help install install-backend install-frontend test test-backend test-frontend test-coverage lint lint-backend lint-frontend format format-backend run-backend run-frontend build-frontend clean
+.PHONY: help install install-backend install-frontend test test-backend test-frontend test-coverage lint lint-backend lint-frontend format format-backend bench bench-check run-backend run-frontend build-frontend clean
 
 # Default target
 help:
@@ -24,6 +24,8 @@ help:
 	@echo "  make lint-backend     Run backend linter (ruff + mypy)"
 	@echo "  make lint-frontend    Run frontend linter"
 	@echo "  make format           Format backend code (ruff)"
+	@echo "  make bench            Run performance benchmarks"
+	@echo "  make bench-check      Run benchmarks and gate against the baseline"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            Remove build artifacts and caches"
@@ -83,6 +85,15 @@ format: format-backend
 format-backend:
 	@echo "Formatting backend code (ruff)..."
 	cd backend && uv run ruff check --fix . && uv run ruff format .
+
+# Performance
+bench:
+	@echo "Running performance benchmarks..."
+	cd backend && uv run pytest benchmarks/ --benchmark-only --benchmark-json=benchmarks/current.json
+
+bench-check: bench
+	@echo "Comparing benchmarks against baseline..."
+	cd backend && uv run python benchmarks/compare.py benchmarks/baseline.json benchmarks/current.json
 
 # Cleanup
 clean:

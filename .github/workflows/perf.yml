@@ -1,0 +1,43 @@
+name: Performance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Backend benchmarks (regression gate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run benchmarks
+        run: uv run pytest benchmarks/ --benchmark-only --benchmark-json=benchmarks/current.json
+
+      - name: Compare against baseline (gate)
+        run: uv run python benchmarks/compare.py benchmarks/baseline.json benchmarks/current.json
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: backend/benchmarks/current.json
