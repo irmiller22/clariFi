@@ -66,10 +66,9 @@ app.add_middleware(
 def _serialize(stored: StoredTransaction) -> TransactionRead:
     """Map a stored transaction to its client-facing representation."""
     txn = stored.transaction
-    d = txn.transaction_date
     return TransactionRead(
         id=str(stored.id),
-        date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
+        date=txn.transaction_date.isoformat(),
         description=txn.description,
         amount=float(txn.amount),
         category=txn.category,
@@ -100,9 +99,8 @@ def _category_dto(category: CategorySpending) -> CategorySpendingRead:
 
 def _timeline_dto(point: TimelinePoint) -> TimelinePointRead:
     """Convert a Decimal timeline point into the float-valued response DTO."""
-    d = point.date
     return TimelinePointRead(
-        date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
+        date=point.date.isoformat(),
         amount=float(point.amount),
         cumulative=float(point.cumulative),
     )
@@ -130,22 +128,20 @@ def _merchant_dto(merchant: MerchantSpending) -> MerchantSpendingRead:
 
 def _recurring_dto(charge: RecurringCharge) -> RecurringChargeRead:
     """Convert a Decimal recurring charge into the float-valued response DTO."""
-    last, nxt = charge.last_date, charge.next_expected_date
     return RecurringChargeRead(
         merchant=charge.merchant,
         cadence=charge.cadence,
         typical_amount=float(charge.typical_amount),
         occurrences=charge.occurrences,
-        last_date=f"{last.month:02d}/{last.day:02d}/{last.year:04d}",
-        next_expected_date=f"{nxt.month:02d}/{nxt.day:02d}/{nxt.year:04d}",
+        last_date=charge.last_date.isoformat(),
+        next_expected_date=charge.next_expected_date.isoformat(),
     )
 
 
 def _anomaly_dto(anomaly: Anomaly) -> AnomalyRead:
     """Convert a Decimal anomaly into the float-valued response DTO."""
-    d = anomaly.transaction_date
     return AnomalyRead(
-        date=f"{d.month:02d}/{d.day:02d}/{d.year:04d}",
+        date=anomaly.transaction_date.isoformat(),
         description=anomaly.description,
         category=anomaly.category,
         amount=float(anomaly.amount),
