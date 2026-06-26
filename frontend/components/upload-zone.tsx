@@ -8,11 +8,29 @@ interface UploadZoneProps {
   onUploadSuccess: (data: { transactions: Transaction[], summary: AnalyticsSummary }) => void
 }
 
+function isCsv(file: File): boolean {
+  return file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv")
+}
+
 export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Add new selections to the staged list, de-duping by name + size.
+  const addFiles = useCallback((incoming: File[]) => {
+    const csvs = incoming.filter(isCsv)
+    if (csvs.length === 0) {
+      setError("Please upload a valid CSV file")
+      return
+    }
+    setError(null)
+    setFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`))
+      return [...prev, ...csvs.filter((f) => !seen.has(`${f.name}:${f.size}`))]
+    })
+  }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -27,39 +45,27 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
-    
-    const files = Array.from(e.dataTransfer.files)
-    const csvFile = files.find(file => file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv"))
-    
-    if (csvFile) {
-      setFile(csvFile)
-      setError(null)
-    } else {
-      setError("Please upload a valid CSV file")
-    }
-  }, [])
+    addFiles(Array.from(e.dataTransfer.files))
+  }, [addFiles])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      if (selectedFile.type === "text/csv" || selectedFile.name.toLowerCase().endsWith(".csv")) {
-        setFile(selectedFile)
-        setError(null)
-      } else {
-        setError("Please upload a valid CSV file")
-      }
-    }
-  }, [])
+    addFiles(Array.from(e.target.files ?? []))
+    e.target.value = "" // allow re-selecting the same file
+  }, [addFiles])
+
+  const removeFile = (key: string) => {
+    setFiles((prev) => prev.filter((f) => `${f.name}:${f.size}` !== key))
+  }
 
   const handleUpload = async () => {
-    if (!file) return
+    if (files.length === 0) return
 
     setIsUploading(true)
     setError(null)
 
     try {
       const formData = new FormData()
-      formData.append("file", file)
+      files.forEach((file) => formData.append("files", file))
 
       const response = await fetch("/api/transactions/upload", {
         method: "POST",
@@ -68,15 +74,16 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        const errorMessage = errorData.detail || errorData.message || `Upload failed: ${response.status}`
+        const errorMessage =
+          errorData.detail || errorData.message || `Upload failed: ${response.status}`
         throw new Error(errorMessage)
       }
 
       const data = await response.json()
-      
+
       if (data.success) {
         onUploadSuccess(data)
-        setFile(null)
+        setFiles([])
       } else {
         setError(data.message || "Upload failed")
       }
@@ -87,10 +94,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
     }
   }
 
-  const removeFile = () => {
-    setFile(null)
-    setError(null)
-  }
+  const hasFiles = files.length > 0
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -101,52 +105,60 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
         onDrop={handleDrop}
         className={`
           relative border-2 border-dashed rounded-lg p-8 text-center transition-colors
-          ${isDragOver 
-            ? "border-primary bg-primary/5" 
+          ${isDragOver
+            ? "border-primary bg-primary/5"
             : "border-border hover:border-primary/50"
           }
-          ${file ? "bg-muted/50" : ""}
+          ${hasFiles ? "bg-muted/50" : ""}
         `}
       >
         <input
           type="file"
           accept=".csv"
+          multiple
           onChange={handleFileSelect}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
-        
-        {!file ? (
+
+        {!hasFiles ? (
           <div className="space-y-4">
             <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
             <div>
               <p className="text-lg font-medium">
-                Drop your CSV file here
+                Drop your CSV files here
               </p>
               <p className="text-sm text-muted-foreground mt-1">
                 or click to browse files
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Supports bank CSV exports up to 10MB
+              Supports multiple bank CSV exports up to 10MB each
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-center gap-3">
-              <FileText className="h-8 w-8 text-primary" />
-              <div className="text-left">
-                <p className="font-medium">{file.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {(file.size / 1024).toFixed(1)} KB
-                </p>
+          <div className="space-y-3">
+            {files.map((file) => (
+              <div key={`${file.name}:${file.size}`} className="flex items-center justify-center gap-3">
+                <FileText className="h-8 w-8 text-primary shrink-0" />
+                <div className="text-left">
+                  <p className="font-medium">{file.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(file.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFile(`${file.name}:${file.size}`)}
+                  aria-label={`Remove ${file.name}`}
+                  className="ml-2 p-1 hover:bg-muted rounded relative z-10"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                onClick={removeFile}
-                className="ml-2 p-1 hover:bg-muted rounded"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            ))}
+            <p className="text-xs text-muted-foreground pt-1">
+              Drop or browse to add more files
+            </p>
           </div>
         )}
       </div>
@@ -160,7 +172,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
       )}
 
       {/* Upload Button */}
-      {file && (
+      {hasFiles && (
         <div className="mt-6 flex justify-center">
           <button
             onClick={handleUpload}
@@ -175,7 +187,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
             ) : (
               <>
                 <CheckCircle className="h-4 w-4" />
-                Upload & Analyze
+                Upload &amp; Analyze {files.length > 1 ? `(${files.length} files)` : ""}
               </>
             )}
           </button>

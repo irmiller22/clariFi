@@ -35,8 +35,13 @@ async def client() -> AsyncIterator[AsyncClient]:
 async def _upload(client: AsyncClient, csv_text: str, filename: str = "test.csv"):
     return await client.post(
         "/api/transactions/upload",
-        files={"file": (filename, csv_text.encode(), "text/csv")},
+        files={"files": (filename, csv_text.encode(), "text/csv")},
     )
+
+
+async def _upload_many(client: AsyncClient, items: list[tuple[str, str]]):
+    payload = [("files", (name, text.encode(), "text/csv")) for name, text in items]
+    return await client.post("/api/transactions/upload", files=payload)
 
 
 class TestUpload:
@@ -69,6 +74,25 @@ class TestUpload:
         await _upload(client, _csv())
         await _upload(client, _csv([SAMPLE_ROWS[0]]))
         assert store.count() == 1
+
+    async def test_multiple_files_are_combined(self, client: AsyncClient) -> None:
+        second = "\n".join([CSV_HEADER, "02/01/2025,02/02/2025,RENT,Housing,Sale,-1000.00,"]) + "\n"
+        response = await _upload_many(client, [("a.csv", _csv()), ("b.csv", second)])
+        assert response.status_code == 200
+        body = response.json()
+        # 3 rows from a.csv + 1 from b.csv, with contiguous ids across the union.
+        assert [t["id"] for t in body["transactions"]] == ["1", "2", "3", "4"]
+        assert store.count() == 4
+        # Combined spend: 50 + 40 (a) + 1000 (b).
+        assert body["summary"]["totalSpent"] == 1090.00
+
+    async def test_batch_with_one_malformed_file_fails_naming_it(self, client: AsyncClient) -> None:
+        response = await _upload_many(
+            client, [("good.csv", _csv()), ("bad.csv", "not,the,right,columns\n1,2,3,4\n")]
+        )
+        assert response.status_code == 400
+        assert "bad.csv" in response.json()["detail"]
+        assert store.count() == 0  # nothing stored when the batch fails
 
 
 class TestGetTransactions:

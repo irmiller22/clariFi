@@ -17,7 +17,7 @@ describe('UploadZone', () => {
   it('renders upload zone with correct initial state', () => {
     render(<UploadZone onUploadSuccess={mockOnUploadSuccess} />)
     
-    expect(screen.getByText('Drop your CSV file here')).toBeInTheDocument()
+    expect(screen.getByText('Drop your CSV files here')).toBeInTheDocument()
     expect(screen.getByText('or click to browse files')).toBeInTheDocument()
   })
 
@@ -32,6 +32,21 @@ describe('UploadZone', () => {
     
     expect(screen.getByText('test.csv')).toBeInTheDocument()
     expect(screen.getByText('Upload & Analyze')).toBeInTheDocument()
+  })
+
+  it('stages multiple selected files', async () => {
+    const user = userEvent.setup()
+    render(<UploadZone onUploadSuccess={mockOnUploadSuccess} />)
+
+    const fileA = new File(['a'], 'a.csv', { type: 'text/csv' })
+    const fileB = new File(['b'], 'b.csv', { type: 'text/csv' })
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+
+    await user.upload(input, [fileA, fileB])
+
+    expect(screen.getByText('a.csv')).toBeInTheDocument()
+    expect(screen.getByText('b.csv')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Upload & Analyze/i })).toBeInTheDocument()
   })
 
   it('handles successful upload and calls onUploadSuccess', async () => {
