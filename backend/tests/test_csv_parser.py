@@ -158,3 +158,42 @@ class TestCSVParser:
         assert transactions[0].category == "Shopping"
         assert transactions[0].type == "Sale"
         assert transactions[0].memo == "Note"
+
+
+_CHECKING_HEADER = "Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #"
+
+
+class TestCheckingFormat:
+    """Chase bank/checking 'Activity' export parsing."""
+
+    def test_parses_checking_row(self):
+        csv_content = (
+            _CHECKING_HEADER + "\nDEBIT,06/23/2026,SOME MERCHANT,-50.00,ACH_DEBIT,17081.81,,\n"
+        )
+        txns = CSVParser().parse(csv_content)
+        assert len(txns) == 1
+        t = txns[0]
+        # Single posting date used for both dates; no category/memo in the export.
+        assert t.transaction_date == "06/23/2026"
+        assert t.post_date == "06/23/2026"
+        assert t.description == "SOME MERCHANT"
+        assert t.category == "Uncategorized"
+        assert t.type == "ACH_DEBIT"
+        assert t.amount == Decimal("-50.00")
+        assert t.memo == ""
+
+    def test_quoted_description_with_commas(self):
+        row = 'DEBIT,06/05/2026,"WIRE TO 500 W, DURHAM NC",-8849.56,WIRE_OUTGOING,11219.47,,'
+        txns = CSVParser().parse(f"{_CHECKING_HEADER}\n{row}\n")
+        assert txns[0].description == "WIRE TO 500 W, DURHAM NC"
+        assert txns[0].amount == Decimal("-8849.56")
+
+    def test_positive_amount_is_a_deposit(self):
+        csv_content = (
+            _CHECKING_HEADER + "\nCREDIT,06/01/2026,PAYROLL DEPOSIT,2500.00,ACH_CREDIT,20000.00,,\n"
+        )
+        assert CSVParser().parse(csv_content)[0].amount == Decimal("2500.00")
+
+    def test_unrecognized_header_is_rejected(self):
+        with pytest.raises(CSVParseError, match="Unrecognized CSV format"):
+            CSVParser().parse("foo,bar,baz\n1,2,3\n")

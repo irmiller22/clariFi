@@ -94,6 +94,17 @@ class TestUpload:
         assert "bad.csv" in response.json()["detail"]
         assert store.count() == 0  # nothing stored when the batch fails
 
+    async def test_mixed_credit_card_and_checking_formats(self, client: AsyncClient) -> None:
+        checking = (
+            "Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #\n"
+            "DEBIT,06/01/2026,RENT WIRE,-1000.00,WIRE_OUTGOING,5000.00,,\n"
+        )
+        response = await _upload_many(client, [("card.csv", _csv()), ("bank.csv", checking)])
+        assert response.status_code == 200
+        body = response.json()
+        assert store.count() == 4  # 3 credit-card rows + 1 checking row
+        assert body["summary"]["totalSpent"] == 1090.00  # 90 (card) + 1000 (checking)
+
 
 class TestGetTransactions:
     async def test_empty_store_returns_empty_page(self, client: AsyncClient) -> None:
