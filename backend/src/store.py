@@ -16,7 +16,7 @@ DAO can implement the same contract and be swapped in behind it.
 from dataclasses import dataclass
 from typing import Literal
 
-from src.domain import Transaction, TransactionType
+from src.domain import Transaction, TransactionKind, TransactionType
 
 SortField = Literal["date", "amount", "merchant", "category"]
 SortOrder = Literal["asc", "desc"]
@@ -77,6 +77,7 @@ class TransactionStore:
         *,
         category: str | None = None,
         txn_type: TransactionType | None = None,
+        kind: TransactionKind | None = None,
         account: str | None = None,
         search: str | None = None,
         sort_by: SortField = "date",
@@ -89,7 +90,9 @@ class TransactionStore:
         ``total`` in the result is the number of matches *after* filtering but
         *before* pagination, so callers can render page counts.
         """
-        matches = [s for s in self._items if self._matches(s, category, txn_type, account, search)]
+        matches = [
+            s for s in self._items if self._matches(s, category, txn_type, kind, account, search)
+        ]
 
         matches.sort(key=_SORT_KEYS[sort_by], reverse=(order == "desc"))
 
@@ -102,6 +105,7 @@ class TransactionStore:
         stored: StoredTransaction,
         category: str | None,
         txn_type: TransactionType | None,
+        kind: TransactionKind | None,
         account: str | None,
         search: str | None,
     ) -> bool:
@@ -109,6 +113,8 @@ class TransactionStore:
         if category is not None and txn.category.casefold() != category.casefold():
             return False
         if txn_type is not None and txn.type != txn_type:
+            return False
+        if kind is not None and txn.kind != kind:
             return False
         if account is not None and txn.account.casefold() != account.casefold():
             return False

@@ -12,7 +12,9 @@ CSV_HEADER = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo"
 SAMPLE_ROWS = [
     "01/05/2025,01/06/2025,WHOLE FOODS,Groceries,Sale,-50.00,",
     "01/10/2025,01/11/2025,SHELL GAS,Gas,Sale,-40.00,",
-    "01/15/2025,01/16/2025,PAYROLL,Income,Payment,2000.00,",
+    # A refund (credit-card "Return") models income; "Payment" would be a
+    # card-payment and excluded from spend/income analytics (see LAT-94).
+    "01/15/2025,01/16/2025,AMAZON REFUND,Shopping,Return,2000.00,",
 ]
 
 
@@ -115,8 +117,8 @@ class TestGetTransactions:
         await _upload(client, _csv())
         body = (await client.get("/api/transactions")).json()
         assert body["total"] == 3
-        # Default sort is date descending -> the Jan 15 payroll row first.
-        assert body["transactions"][0]["description"] == "PAYROLL"
+        # Default sort is date descending -> the Jan 15 refund row first.
+        assert body["transactions"][0]["description"] == "AMAZON REFUND"
 
     async def test_filter_by_category(self, client: AsyncClient) -> None:
         await _upload(client, _csv())
@@ -172,6 +174,43 @@ class TestGetTransactions:
         filtered = (await client.get("/api/transactions", params={"account": "5168"})).json()
         assert filtered["total"] == 1
         assert filtered["transactions"][0]["account"] == "5168"
+
+
+class TestClassificationExclusion:
+    """Transfers and card payments are excluded from spend analytics (LAT-94)."""
+
+    _CHECKING = (
+        "Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #\n"
+        "DEBIT,01/05/2025,WHOLE FOODS,-50.00,DEBIT_CARD,1000.00,,\n"
+        "DEBIT,01/06/2025,Online Transfer to SAV ...5168,-500.00,ACH_DEBIT,500.00,,\n"
+        "DEBIT,01/07/2025,Payment to Chase card 4796,-300.00,ACH_DEBIT,200.00,,\n"
+    )
+
+    async def test_money_movement_excluded_from_summary(self, client: AsyncClient) -> None:
+        body = (await _upload(client, self._CHECKING)).json()
+        # Only WHOLE FOODS counts; the transfer and card payment are excluded.
+        assert body["summary"]["totalSpent"] == 50.00
+        assert body["summary"]["transactionCount"] == 1
+
+    async def test_all_kinds_appear_in_transactions_list(self, client: AsyncClient) -> None:
+        await _upload(client, self._CHECKING)
+        txns = (await client.get("/api/transactions")).json()["transactions"]
+        kinds = {t["description"]: t["kind"] for t in txns}
+        assert kinds["WHOLE FOODS"] == "spending"
+        assert kinds["Online Transfer to SAV ...5168"] == "transfer"
+        assert kinds["Payment to Chase card 4796"] == "card_payment"
+
+    async def test_filter_by_kind(self, client: AsyncClient) -> None:
+        await _upload(client, self._CHECKING)
+        body = (await client.get("/api/transactions", params={"kind": "transfer"})).json()
+        assert body["total"] == 1
+        assert body["transactions"][0]["kind"] == "transfer"
+
+    async def test_by_category_excludes_money_movement(self, client: AsyncClient) -> None:
+        await _upload(client, self._CHECKING)
+        cats = (await client.get("/api/analytics/by-category")).json()
+        # Only the WHOLE FOODS spend remains after excluding movement.
+        assert sum(c["amount"] for c in cats) == 50.00
 
 
 class TestAnalyticsSummaryEndpoint:

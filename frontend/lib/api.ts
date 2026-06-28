@@ -61,6 +61,7 @@ export const api = {
     offset?: number
     category?: string
     type?: "debit" | "credit"
+    kind?: string
     account?: string
     search?: string
   }): Promise<{ transactions: Transaction[], total: number }> {
@@ -70,6 +71,7 @@ export const api = {
     if (params?.offset !== undefined) queryParams.set("offset", params.offset.toString())
     if (params?.category) queryParams.set("category", params.category)
     if (params?.type) queryParams.set("type", params.type)
+    if (params?.kind) queryParams.set("kind", params.kind)
     if (params?.account) queryParams.set("account", params.account)
     if (params?.search) queryParams.set("search", params.search)
 

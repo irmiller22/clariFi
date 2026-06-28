@@ -5,6 +5,7 @@ export interface Transaction {
   amount: number
   category?: string
   type: 'debit' | 'credit'
+  kind?: 'spending' | 'income' | 'transfer' | 'card_payment' | 'fee'
   account?: string
 }
 
