@@ -18,6 +18,8 @@ import {
 import { DollarSign, TrendingDown, TrendingUp, CreditCard, Minus } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { api, ApiError } from "@/lib/api"
+import { SubscriptionsPanel } from "@/components/subscriptions-panel"
+import { CashflowPanel } from "@/components/cashflow-panel"
 import type {
   AnalyticsSummary,
   CategorySpending,
@@ -290,6 +292,12 @@ export function AnalyticsDashboard({ summary }: AnalyticsDashboardProps) {
               </div>
             </div>
           )}
+
+          {/* Cashflow: income vs spend vs net */}
+          <CashflowPanel />
+
+          {/* Recurring subscriptions */}
+          <SubscriptionsPanel />
 
           {/* Category Details Table */}
           <div className="bg-card border border-border rounded-lg p-6">
