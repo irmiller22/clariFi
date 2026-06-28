@@ -14,6 +14,7 @@ def _tx(
     merchant: str | None = None,
     category: str = "Food",
     amount: str = "-5.00",
+    account: str = "",
 ) -> Transaction:
     """Build a Transaction for January 2025 with the given fields."""
     return Transaction(
@@ -24,6 +25,7 @@ def _tx(
         category=category,
         source_type="Sale",
         amount=Decimal(amount),
+        account=account,
     )
 
 
@@ -96,6 +98,19 @@ class TestFilters:
         result = self._store().query(txn_type="debit", search="gas")
         assert result.total == 1
         assert result.items[0].transaction.description == "Shell Gas"
+
+    def test_filter_by_account(self) -> None:
+        store = TransactionStore()
+        store.replace(
+            [
+                _tx(description="Card buy", account="4796"),
+                _tx(description="Bank buy", account="5168"),
+                _tx(description="Card buy 2", account="4796"),
+            ]
+        )
+        result = store.query(account="4796")
+        assert result.total == 2
+        assert all(i.transaction.account == "4796" for i in result.items)
 
 
 class TestSorting:

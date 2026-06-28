@@ -44,7 +44,7 @@ from src.services.analytics import (
     trends,
 )
 from src.services.csv_parser import CSVParseError, CSVParser
-from src.services.normalizer import normalize_many
+from src.services.normalizer import account_from_filename, normalize_many
 from src.store import SortField, SortOrder, StoredTransaction, store
 
 app = FastAPI(
@@ -73,6 +73,7 @@ def _serialize(stored: StoredTransaction) -> TransactionRead:
         amount=float(txn.amount),
         category=txn.category,
         type=txn.type,
+        account=txn.account,
     )
 
 
@@ -221,7 +222,8 @@ async def upload_transactions(files: list[UploadFile] = File(...)) -> UploadResu
             raise HTTPException(
                 status_code=400, detail=f"Error parsing {upload.filename}: {e!s}"
             ) from e
-        transactions.extend(normalize_many(rows))
+        account = account_from_filename(upload.filename)
+        transactions.extend(normalize_many(rows, account))
 
     store.replace(transactions)
     stored = store.all()
@@ -240,6 +242,7 @@ async def get_transactions(
     offset: int = 0,
     category: str | None = None,
     type: TransactionType | None = None,
+    account: str | None = None,
     search: str | None = None,
     sort: SortField = "date",
     order: SortOrder = "desc",
@@ -248,6 +251,7 @@ async def get_transactions(
     result = store.query(
         category=category,
         txn_type=type,
+        account=account,
         search=search,
         sort_by=sort,
         order=order,

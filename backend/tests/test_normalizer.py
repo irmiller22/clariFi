@@ -7,7 +7,7 @@ import pytest
 
 from src.domain import Transaction
 from src.schemas import TransactionCreate
-from src.services.normalizer import normalize, normalize_many
+from src.services.normalizer import account_from_filename, normalize, normalize_many
 
 
 def _row(**overrides: object) -> TransactionCreate:
@@ -123,6 +123,30 @@ class TestMerchantCanonicalization:
     def test_non_location_two_letter_word_is_kept(self) -> None:
         # A trailing word that isn't a US state code must not be dropped.
         assert normalize(_row(description="JOES CRAB SHACK")).merchant == "JOES CRAB SHACK"
+
+
+class TestAccountProvenance:
+    """Account label is derived from the filename and carried on each txn."""
+
+    def test_account_from_chase_filename(self) -> None:
+        assert account_from_filename("Chase5168_Activity_20260626.CSV") == "5168"
+        assert account_from_filename("Chase4796_Activity20260626.CSV") == "4796"
+
+    def test_account_falls_back_to_stem(self) -> None:
+        assert account_from_filename("my-export.csv") == "my-export"
+
+    def test_account_handles_empty_filename(self) -> None:
+        assert account_from_filename("") == "unknown"
+
+    def test_normalize_sets_account(self) -> None:
+        assert normalize(_row(), account="5168").account == "5168"
+
+    def test_normalize_many_tags_all_rows(self) -> None:
+        rows = [_row(description="A"), _row(description="B")]
+        assert [t.account for t in normalize_many(rows, account="4796")] == ["4796", "4796"]
+
+    def test_account_defaults_empty(self) -> None:
+        assert normalize(_row()).account == ""
 
 
 class TestNormalizeMany:

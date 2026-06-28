@@ -77,6 +77,7 @@ class TransactionStore:
         *,
         category: str | None = None,
         txn_type: TransactionType | None = None,
+        account: str | None = None,
         search: str | None = None,
         sort_by: SortField = "date",
         order: SortOrder = "desc",
@@ -88,7 +89,7 @@ class TransactionStore:
         ``total`` in the result is the number of matches *after* filtering but
         *before* pagination, so callers can render page counts.
         """
-        matches = [s for s in self._items if self._matches(s, category, txn_type, search)]
+        matches = [s for s in self._items if self._matches(s, category, txn_type, account, search)]
 
         matches.sort(key=_SORT_KEYS[sort_by], reverse=(order == "desc"))
 
@@ -101,12 +102,15 @@ class TransactionStore:
         stored: StoredTransaction,
         category: str | None,
         txn_type: TransactionType | None,
+        account: str | None,
         search: str | None,
     ) -> bool:
         txn = stored.transaction
         if category is not None and txn.category.casefold() != category.casefold():
             return False
         if txn_type is not None and txn.type != txn_type:
+            return False
+        if account is not None and txn.account.casefold() != account.casefold():
             return False
         return not (search is not None and search.casefold() not in txn.description.casefold())
 

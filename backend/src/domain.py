@@ -38,6 +38,8 @@ class Transaction(BaseModel):
     source_type: str
     amount: Decimal
     memo: str = ""
+    # Source account label (e.g. "5168"), from the uploaded file. Empty if unknown.
+    account: str = ""
 
     # mypy refuses decorators stacked on @property; computed_field is the
     # idiomatic Pydantic v2 way to expose a derived value (incl. in model_dump).

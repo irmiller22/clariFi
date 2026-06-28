@@ -16,6 +16,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("")
   const [typeFilter, setTypeFilter] = useState<string>("")
+  const [accountFilter, setAccountFilter] = useState<string>("")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [currentPage, setCurrentPage] = useState(1)
@@ -31,6 +32,10 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
     return [...new Set(transactions.map(t => t.type))]
   }, [transactions])
 
+  const accounts = useMemo(() => {
+    return [...new Set(transactions.map(t => t.account).filter(Boolean))].sort()
+  }, [transactions])
+
   // Filter and sort transactions
   const filteredAndSorted = useMemo(() => {
     const filtered = transactions.filter(transaction => {
@@ -40,8 +45,9 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
       
       const matchesCategory = !categoryFilter || transaction.category === categoryFilter
       const matchesType = !typeFilter || transaction.type === typeFilter
+      const matchesAccount = !accountFilter || transaction.account === accountFilter
 
-      return matchesSearch && matchesCategory && matchesType
+      return matchesSearch && matchesCategory && matchesType && matchesAccount
     })
 
     filtered.sort((a, b) => {
@@ -65,7 +71,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
     })
 
     return filtered
-  }, [transactions, searchTerm, categoryFilter, typeFilter, sortField, sortOrder])
+  }, [transactions, searchTerm, categoryFilter, typeFilter, accountFilter, sortField, sortOrder])
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSorted.length / itemsPerPage)
@@ -131,6 +137,20 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
             </option>
           ))}
         </select>
+
+        {/* Account Filter (only when multiple accounts are present) */}
+        {accounts.length > 1 && (
+          <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="border border-input rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            <option value="">All Accounts</option>
+            {accounts.map(account => (
+              <option key={account} value={account}>{account}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Results Info */}
@@ -171,7 +191,8 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
                     {getSortIcon("category")}
                   </div>
                 </th>
-                <th 
+                <th className="text-left p-4 font-medium">Account</th>
+                <th
                   className="text-right p-4 font-medium cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => handleSort("amount")}
                 >
@@ -200,6 +221,9 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
                     <span className="inline-flex items-center px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-xs">
                       {transaction.category || "Uncategorized"}
                     </span>
+                  </td>
+                  <td className="p-4 text-sm text-muted-foreground">
+                    {transaction.account || "—"}
                   </td>
                   <td className="p-4 text-sm text-right">
                     <div className="flex items-center justify-end gap-1">

@@ -76,6 +76,7 @@ class TransactionRead(BaseModel):
     amount: float
     category: str
     type: TransactionType
+    account: str = ""
 
 
 class TransactionList(BaseModel):
