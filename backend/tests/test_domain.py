@@ -74,3 +74,37 @@ class TestSerialization:
         dumped = _make(amount=Decimal("-45.74"), transaction_date=date(2025, 3, 1)).model_dump()
         assert dumped["type"] == "debit"
         assert dumped["month"] == "2025-03"
+
+
+class TestKind:
+    """`kind` classifies each transaction for analytics."""
+
+    def test_credit_card_payment_by_source_type(self) -> None:
+        # A credit-card "Payment" (paying your card) is internal money movement.
+        assert _make(source_type="Payment", amount=Decimal("500.00")).kind == "card_payment"
+
+    def test_card_payment_by_description(self) -> None:
+        tx = _make(description="Payment to Chase card 4796", amount=Decimal("-300.00"))
+        assert tx.kind == "card_payment"
+
+    def test_transfer_by_description(self) -> None:
+        tx = _make(description="Online Transfer to SAV ...5168", amount=Decimal("-500.00"))
+        assert tx.kind == "transfer"
+
+    def test_fee(self) -> None:
+        assert _make(description="MONTHLY SERVICE FEE", amount=Decimal("-12.00")).kind == "fee"
+
+    def test_spending_default(self) -> None:
+        assert _make(source_type="Sale", amount=Decimal("-20.00")).kind == "spending"
+
+    def test_income_default(self) -> None:
+        # A positive that isn't a payment/transfer (e.g. a refund) is income.
+        assert _make(source_type="Return", amount=Decimal("30.00")).kind == "income"
+
+    def test_is_money_movement(self) -> None:
+        assert _make(source_type="Payment", amount=Decimal(100)).is_money_movement is True
+        assert _make(description="Transfer of funds", amount=Decimal(-100)).is_money_movement
+        assert _make(source_type="Sale", amount=Decimal(-10)).is_money_movement is False
+        assert (
+            _make(description="MONTHLY SERVICE FEE", amount=Decimal(-5)).is_money_movement is False
+        )

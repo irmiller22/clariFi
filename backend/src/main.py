@@ -3,7 +3,7 @@
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.domain import Transaction, TransactionType
+from src.domain import Transaction, TransactionKind, TransactionType
 from src.schemas import (
     AnalyticsSummary,
     AnomalyRead,
@@ -73,8 +73,18 @@ def _serialize(stored: StoredTransaction) -> TransactionRead:
         amount=float(txn.amount),
         category=txn.category,
         type=txn.type,
+        kind=txn.kind,
         account=txn.account,
     )
+
+
+def _spendable(transactions: list[Transaction]) -> list[Transaction]:
+    """Drop internal money-movement (transfers, card payments) from spend analytics."""
+    return [t for t in transactions if not t.is_money_movement]
+
+
+def _stored_spendable() -> list[Transaction]:
+    return _spendable([stored.transaction for stored in store.all()])
 
 
 def _summary_dto(summary: SpendingSummary) -> AnalyticsSummary:
@@ -232,7 +242,7 @@ async def upload_transactions(files: list[UploadFile] = File(...)) -> UploadResu
         success=True,
         message=f"Successfully parsed {len(stored)} transactions from {len(files)} file(s)",
         transactions=[_serialize(s) for s in stored],
-        summary=_summary_dto(summarize(transactions)),
+        summary=_summary_dto(summarize(_spendable(transactions))),
     )
 
 
@@ -242,6 +252,7 @@ async def get_transactions(
     offset: int = 0,
     category: str | None = None,
     type: TransactionType | None = None,
+    kind: TransactionKind | None = None,
     account: str | None = None,
     search: str | None = None,
     sort: SortField = "date",
@@ -251,6 +262,7 @@ async def get_transactions(
     result = store.query(
         category=category,
         txn_type=type,
+        kind=kind,
         account=account,
         search=search,
         sort_by=sort,
@@ -267,13 +279,13 @@ async def get_transactions(
 @app.get("/api/analytics/summary")
 async def get_analytics_summary() -> AnalyticsSummary:
     """Aggregate spending metrics for the current transaction set."""
-    return _summary_dto(summarize([s.transaction for s in store.all()]))
+    return _summary_dto(summarize(_stored_spendable()))
 
 
 @app.get("/api/analytics/by-category")
 async def get_category_analytics() -> list[CategorySpendingRead]:
     """Spend grouped by category for the current transaction set."""
-    breakdown = spending_by_category([s.transaction for s in store.all()])
+    breakdown = spending_by_category(_stored_spendable())
     return [_category_dto(c) for c in breakdown]
 
 
@@ -282,7 +294,7 @@ async def get_timeline_analytics(
     granularity: Granularity = "month",
 ) -> list[TimelinePointRead]:
     """Spend over time (gap-filled) at the requested granularity."""
-    timeline = spending_timeline([s.transaction for s in store.all()], granularity)
+    timeline = spending_timeline(_stored_spendable(), granularity)
     return [_timeline_dto(p) for p in timeline]
 
 
@@ -293,7 +305,7 @@ async def get_trends_analytics(
 ) -> SpendingTrendsRead:
     """Month-over-month spend trends, overall and by category."""
     result = trends(
-        [s.transaction for s in store.all()],
+        _stored_spendable(),
         category=category,
         months=months,
     )
@@ -306,21 +318,21 @@ async def get_top_merchants(
     by: RankBy = "spend",
 ) -> list[MerchantSpendingRead]:
     """Top merchants ranked by spend (default) or transaction count."""
-    result = top_merchants([s.transaction for s in store.all()], limit=limit, by=by)
+    result = top_merchants(_stored_spendable(), limit=limit, by=by)
     return [_merchant_dto(m) for m in result]
 
 
 @app.get("/api/analytics/recurring")
 async def get_recurring_charges() -> list[RecurringChargeRead]:
     """Detected recurring charges / subscriptions for the current set."""
-    result = recurring_charges([s.transaction for s in store.all()])
+    result = recurring_charges(_stored_spendable())
     return [_recurring_dto(c) for c in result]
 
 
 @app.get("/api/analytics/anomalies")
 async def get_anomalies() -> list[AnomalyRead]:
     """Transactions that are unusually large for their category."""
-    result = detect_anomalies([s.transaction for s in store.all()])
+    result = detect_anomalies(_stored_spendable())
     return [_anomaly_dto(a) for a in result]
 
 
@@ -329,12 +341,12 @@ async def get_rolling_average(
     window: int = Query(default=3, ge=1),
 ) -> list[RollingAverageRead]:
     """Monthly spend with a trailing moving average over ``window`` months."""
-    result = rolling_average([s.transaction for s in store.all()], window=window)
+    result = rolling_average(_stored_spendable(), window=window)
     return [_rolling_dto(p) for p in result]
 
 
 @app.get("/api/analytics/cashflow")
 async def get_cashflow() -> list[CashflowRead]:
     """Monthly income, spend, and net for the current transaction set."""
-    result = cashflow([s.transaction for s in store.all()])
+    result = cashflow(_stored_spendable())
     return [_cashflow_dto(p) for p in result]

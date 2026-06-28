@@ -12,6 +12,13 @@ interface TransactionTableProps {
 type SortField = "date" | "description" | "amount" | "category"
 type SortOrder = "asc" | "desc"
 
+// Money-movement kinds are excluded from spend analytics; flag them in the list.
+const KIND_LABEL: Record<string, string> = {
+  transfer: "Transfer",
+  card_payment: "Card payment",
+  fee: "Fee",
+}
+
 export function TransactionTable({ transactions }: TransactionTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("")
@@ -216,6 +223,11 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
                   </td>
                   <td className="p-4 text-sm font-medium">
                     {transaction.description}
+                    {transaction.kind && KIND_LABEL[transaction.kind] && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                        {KIND_LABEL[transaction.kind]}
+                      </span>
+                    )}
                   </td>
                   <td className="p-4 text-sm">
                     <span className="inline-flex items-center px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-xs">
