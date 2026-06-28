@@ -1,16 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { UploadIcon, BarChart3, CreditCard, DollarSign } from "lucide-react"
 import { UploadZone } from "@/components/upload-zone"
 import { TransactionTable } from "@/components/transaction-table"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { Transaction, AnalyticsSummary } from "@/lib/types"
+import { DEFAULT_CATEGORIES } from "@/lib/categories"
 
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
+  const [customCategories, setCustomCategories] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<"upload" | "transactions" | "analytics">("upload")
 
   const handleUploadSuccess = (data: { transactions: Transaction[], summary: AnalyticsSummary }) => {
@@ -18,6 +20,43 @@ export default function Home() {
     setSummary(data.summary)
     setActiveTab("transactions")
   }
+
+  // Apply a category to one or more transactions (single edit or "apply to all
+  // from this merchant"). In-session only — edits are lost on reload until the
+  // persistent store (LAT-101/103) lands.
+  const handleCategorize = (transactionIds: string[], category: string) => {
+    const ids = new Set(transactionIds)
+    setTransactions(prev =>
+      prev.map(t => (ids.has(t.id) ? { ...t, category } : t))
+    )
+  }
+
+  const handleAddCategory = (category: string) => {
+    const trimmed = category.trim()
+    if (!trimmed) return
+    setCustomCategories(prev =>
+      prev.some(c => c.toLowerCase() === trimmed.toLowerCase()) ? prev : [...prev, trimmed]
+    )
+  }
+
+  // Built-in categories, plus any the user added, plus any already present on
+  // the uploaded transactions (so bank-provided categories stay selectable).
+  const availableCategories = useMemo(() => {
+    const seen = new Set<string>()
+    const ordered: string[] = []
+    for (const c of [
+      ...DEFAULT_CATEGORIES,
+      ...customCategories,
+      ...transactions.map(t => t.category).filter((c): c is string => Boolean(c)),
+    ]) {
+      const key = c.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        ordered.push(c)
+      }
+    }
+    return ordered
+  }, [customCategories, transactions])
 
   return (
     <div className="min-h-screen bg-background">
@@ -112,7 +151,12 @@ export default function Home() {
                 {transactions.length} transaction{transactions.length !== 1 ? "s" : ""} loaded
               </p>
             </div>
-            <TransactionTable transactions={transactions} />
+            <TransactionTable
+              transactions={transactions}
+              availableCategories={availableCategories}
+              onCategorize={handleCategorize}
+              onAddCategory={handleAddCategory}
+            />
           </div>
         )}
 

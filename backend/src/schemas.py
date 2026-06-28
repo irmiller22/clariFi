@@ -73,6 +73,7 @@ class TransactionRead(BaseModel):
     id: str
     date: str
     description: str
+    merchant: str = ""
     amount: float
     category: str
     type: TransactionType
