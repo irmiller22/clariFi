@@ -3,7 +3,7 @@
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.domain import TransactionType
+from src.domain import Transaction, TransactionType
 from src.schemas import (
     AnalyticsSummary,
     AnomalyRead,
@@ -199,25 +199,36 @@ async def health_check() -> dict[str, str]:
 
 
 @app.post("/api/transactions/upload")
-async def upload_transactions(file: UploadFile = File(...)) -> UploadResult:
-    """Upload and parse a CSV; normalize and store the transactions."""
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
+async def upload_transactions(files: list[UploadFile] = File(...)) -> UploadResult:
+    """Upload one or more CSVs; parse, normalize, and store the combined set.
 
-    content = await file.read()
-    try:
-        csv_content = content.decode("utf-8")
-        rows = CSVParser().parse(csv_content)
-    except (UnicodeDecodeError, CSVParseError) as e:
-        raise HTTPException(status_code=400, detail=f"Error parsing CSV: {e!s}") from e
+    All files in a single request become the current set (single-user replace);
+    a malformed file fails the whole batch, naming the offending file.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
 
-    transactions = normalize_many(rows)
+    parser = CSVParser()
+    transactions: list[Transaction] = []
+    for upload in files:
+        if not upload.filename or not upload.filename.lower().endswith(".csv"):
+            name = upload.filename or "file"
+            raise HTTPException(status_code=400, detail=f"{name} must be a CSV")
+        content = await upload.read()
+        try:
+            rows = parser.parse(content.decode("utf-8"))
+        except (UnicodeDecodeError, CSVParseError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"Error parsing {upload.filename}: {e!s}"
+            ) from e
+        transactions.extend(normalize_many(rows))
+
     store.replace(transactions)
     stored = store.all()
 
     return UploadResult(
         success=True,
-        message=f"Successfully parsed {len(stored)} transactions",
+        message=f"Successfully parsed {len(stored)} transactions from {len(files)} file(s)",
         transactions=[_serialize(s) for s in stored],
         summary=_summary_dto(summarize(transactions)),
     )
