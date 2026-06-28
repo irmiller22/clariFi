@@ -5,6 +5,7 @@ export interface Transaction {
   amount: number
   category?: string
   type: 'debit' | 'credit'
+  account?: string
 }
 
 export interface AnalyticsSummary {

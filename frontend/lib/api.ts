@@ -61,14 +61,16 @@ export const api = {
     offset?: number
     category?: string
     type?: "debit" | "credit"
+    account?: string
     search?: string
   }): Promise<{ transactions: Transaction[], total: number }> {
     const queryParams = new URLSearchParams()
-    
+
     if (params?.limit !== undefined) queryParams.set("limit", params.limit.toString())
     if (params?.offset !== undefined) queryParams.set("offset", params.offset.toString())
     if (params?.category) queryParams.set("category", params.category)
     if (params?.type) queryParams.set("type", params.type)
+    if (params?.account) queryParams.set("account", params.account)
     if (params?.search) queryParams.set("search", params.search)
 
     const url = `${API_BASE_URL}/api/transactions?${queryParams.toString()}`

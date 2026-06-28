@@ -156,6 +156,22 @@ class TestGetTransactions:
         assert txn["date"] == "2025-01-05"  # ISO-8601
         assert txn["amount"] == -50.00  # JSON number, sign preserved
         assert txn["type"] == "debit"
+        assert txn["account"] == "test"  # derived from the "test.csv" filename
+
+    async def test_account_is_derived_and_filterable(self, client: AsyncClient) -> None:
+        await _upload_many(
+            client,
+            [
+                ("Chase4796_Activity.csv", _csv()),
+                ("Chase5168_Activity.csv", _csv([SAMPLE_ROWS[0]])),
+            ],
+        )
+        all_txns = (await client.get("/api/transactions")).json()
+        assert {t["account"] for t in all_txns["transactions"]} == {"4796", "5168"}
+
+        filtered = (await client.get("/api/transactions", params={"account": "5168"})).json()
+        assert filtered["total"] == 1
+        assert filtered["transactions"][0]["account"] == "5168"
 
 
 class TestAnalyticsSummaryEndpoint:

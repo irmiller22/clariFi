@@ -124,7 +124,26 @@ def _normalize_merchant(description: str) -> str:
     return " ".join(tokens) or _collapse_whitespace(description)
 
 
-def normalize(row: TransactionCreate) -> Transaction:
+_ACCOUNT_RE = re.compile(r"chase[_-]?(\w+?)[_-]?activity", re.IGNORECASE)
+_CHASE_DIGITS_RE = re.compile(r"chase(\d+)", re.IGNORECASE)
+
+
+def account_from_filename(filename: str) -> str:
+    """Best-effort account label from a Chase export filename.
+
+    ``Chase5168_Activity_20260626.CSV`` -> ``5168``. Falls back to the filename
+    stem, then ``"unknown"``.
+    """
+    if not filename:
+        return "unknown"
+    stem = filename.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    match = _CHASE_DIGITS_RE.search(stem) or _ACCOUNT_RE.search(stem)
+    if match:
+        return match.group(1)
+    return stem or "unknown"
+
+
+def normalize(row: TransactionCreate, account: str = "") -> Transaction:
     """Convert one validated CSV row into a canonical :class:`Transaction`."""
     description = _collapse_whitespace(row.description)
     return Transaction(
@@ -136,9 +155,10 @@ def normalize(row: TransactionCreate) -> Transaction:
         source_type=row.type,
         amount=row.amount,
         memo=row.memo or "",
+        account=account,
     )
 
 
-def normalize_many(rows: list[TransactionCreate]) -> list[Transaction]:
+def normalize_many(rows: list[TransactionCreate], account: str = "") -> list[Transaction]:
     """Normalize a list of rows, preserving order."""
-    return [normalize(row) for row in rows]
+    return [normalize(row, account) for row in rows]
