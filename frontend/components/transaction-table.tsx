@@ -1,12 +1,16 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Search, ChevronUp, ChevronDown, TrendingDown, TrendingUp } from "lucide-react"
+import { Search, ChevronUp, ChevronDown, TrendingDown, TrendingUp, Plus, Sparkles } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Transaction } from "@/lib/types"
+import { UNCATEGORIZED, suggestCategory } from "@/lib/categories"
 
 interface TransactionTableProps {
   transactions: Transaction[]
+  availableCategories: string[]
+  onCategorize: (transactionIds: string[], category: string) => void
+  onAddCategory: (category: string) => void
 }
 
 type SortField = "date" | "description" | "amount" | "category"
@@ -19,7 +23,19 @@ const KIND_LABEL: Record<string, string> = {
   fee: "Fee",
 }
 
-export function TransactionTable({ transactions }: TransactionTableProps) {
+// The merchant identity used to group transactions for "apply to all from this
+// merchant" and for category suggestions: prefer the normalized merchant, fall
+// back to the raw description.
+function merchantKey(t: Transaction): string {
+  return (t.merchant || t.description).toLowerCase()
+}
+
+export function TransactionTable({
+  transactions,
+  availableCategories,
+  onCategorize,
+  onAddCategory,
+}: TransactionTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("")
   const [typeFilter, setTypeFilter] = useState<string>("")
@@ -27,6 +43,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc")
   const [currentPage, setCurrentPage] = useState(1)
+  const [newCategory, setNewCategory] = useState("")
   const itemsPerPage = 50
 
   // Get unique categories and types for filters
@@ -43,14 +60,34 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
     return [...new Set(transactions.map(t => t.account).filter(Boolean))].sort()
   }, [transactions])
 
+  // Map each merchant identity to the ids of every transaction sharing it, so a
+  // single tag can be applied across all of them in one click.
+  const idsByMerchant = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const t of transactions) {
+      const key = merchantKey(t)
+      const ids = map.get(key)
+      if (ids) ids.push(t.id)
+      else map.set(key, [t.id])
+    }
+    return map
+  }, [transactions])
+
+  // Count of transactions still lacking a category — drives the suggestion CTA.
+  const uncategorizedCount = useMemo(
+    () => transactions.filter(t => !t.category).length,
+    [transactions]
+  )
+
   // Filter and sort transactions
   const filteredAndSorted = useMemo(() => {
     const filtered = transactions.filter(transaction => {
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (transaction.category?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
-      
-      const matchesCategory = !categoryFilter || transaction.category === categoryFilter
+
+      const matchesCategory = !categoryFilter ||
+        (categoryFilter === UNCATEGORIZED ? !transaction.category : transaction.category === categoryFilter)
       const matchesType = !typeFilter || transaction.type === typeFilter
       const matchesAccount = !accountFilter || transaction.account === accountFilter
 
@@ -98,9 +135,33 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return null
-    return sortOrder === "asc" ? 
-      <ChevronUp className="h-4 w-4" /> : 
+    return sortOrder === "asc" ?
+      <ChevronUp className="h-4 w-4" /> :
       <ChevronDown className="h-4 w-4" />
+  }
+
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim()
+    if (!trimmed) return
+    onAddCategory(trimmed)
+    setNewCategory("")
+  }
+
+  // Tag every uncategorized transaction whose merchant/description maps to a
+  // seed rule, in one pass.
+  const handleAutoSuggestAll = () => {
+    const byCategory = new Map<string, string[]>()
+    for (const t of transactions) {
+      if (t.category) continue
+      const suggestion = suggestCategory(t.merchant || t.description)
+      if (!suggestion) continue
+      const ids = byCategory.get(suggestion)
+      if (ids) ids.push(t.id)
+      else byCategory.set(suggestion, [t.id])
+    }
+    for (const [category, ids] of byCategory) {
+      onCategorize(ids, category)
+    }
   }
 
   return (
@@ -123,9 +184,11 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
+          aria-label="Filter by category"
           className="border border-input rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >
           <option value="">All Categories</option>
+          <option value={UNCATEGORIZED}>{UNCATEGORIZED}</option>
           {categories.map(category => (
             <option key={category} value={category}>{category}</option>
           ))}
@@ -135,6 +198,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
+          aria-label="Filter by type"
           className="border border-input rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >
           <option value="">All Types</option>
@@ -150,6 +214,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
           <select
             value={accountFilter}
             onChange={(e) => setAccountFilter(e.target.value)}
+            aria-label="Filter by account"
             className="border border-input rounded-md bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <option value="">All Accounts</option>
@@ -157,6 +222,45 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
               <option key={account} value={account}>{account}</option>
             ))}
           </select>
+        )}
+      </div>
+
+      {/* Categorization controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Add a category…"
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                handleAddCategory()
+              }
+            }}
+            aria-label="New category name"
+            className="w-44 px-3 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          />
+          <button
+            type="button"
+            onClick={handleAddCategory}
+            className="inline-flex items-center gap-1 px-3 py-2 text-sm border border-input rounded-md hover:bg-accent"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        </div>
+
+        {uncategorizedCount > 0 && (
+          <button
+            type="button"
+            onClick={handleAutoSuggestAll}
+            className="inline-flex items-center gap-1 px-3 py-2 text-sm border border-input rounded-md hover:bg-accent"
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            Auto-categorize ({uncategorizedCount} uncategorized)
+          </button>
         )}
       </div>
 
@@ -171,7 +275,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
-                <th 
+                <th
                   className="text-left p-4 font-medium cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => handleSort("date")}
                 >
@@ -180,7 +284,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
                     {getSortIcon("date")}
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-left p-4 font-medium cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => handleSort("description")}
                 >
@@ -189,7 +293,7 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
                     {getSortIcon("description")}
                   </div>
                 </th>
-                <th 
+                <th
                   className="text-left p-4 font-medium cursor-pointer hover:bg-muted/80 transition-colors"
                   onClick={() => handleSort("category")}
                 >
@@ -211,49 +315,90 @@ export function TransactionTable({ transactions }: TransactionTableProps) {
               </tr>
             </thead>
             <tbody>
-              {paginatedTransactions.map((transaction, index) => (
-                <tr 
-                  key={transaction.id} 
-                  className={`border-t border-border hover:bg-muted/25 transition-colors ${
-                    index % 2 === 0 ? "bg-background" : "bg-muted/10"
-                  }`}
-                >
-                  <td className="p-4 text-sm">
-                    {formatDate(transaction.date)}
-                  </td>
-                  <td className="p-4 text-sm font-medium">
-                    {transaction.description}
-                    {transaction.kind && KIND_LABEL[transaction.kind] && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                        {KIND_LABEL[transaction.kind]}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-sm">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full bg-secondary text-secondary-foreground text-xs">
-                      {transaction.category || "Uncategorized"}
-                    </span>
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {transaction.account || "—"}
-                  </td>
-                  <td className="p-4 text-sm text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {transaction.type === "debit" ? (
-                        <TrendingDown className="h-3 w-3 text-red-500" />
-                      ) : (
-                        <TrendingUp className="h-3 w-3 text-green-500" />
+              {paginatedTransactions.map((transaction, index) => {
+                const sharedIds = idsByMerchant.get(merchantKey(transaction)) ?? [transaction.id]
+                const suggestion = !transaction.category
+                  ? suggestCategory(transaction.merchant || transaction.description)
+                  : undefined
+                return (
+                  <tr
+                    key={transaction.id}
+                    className={`border-t border-border hover:bg-muted/25 transition-colors ${
+                      index % 2 === 0 ? "bg-background" : "bg-muted/10"
+                    }`}
+                  >
+                    <td className="p-4 text-sm">
+                      {formatDate(transaction.date)}
+                    </td>
+                    <td className="p-4 text-sm font-medium">
+                      {transaction.description}
+                      {transaction.kind && KIND_LABEL[transaction.kind] && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                          {KIND_LABEL[transaction.kind]}
+                        </span>
                       )}
-                      <span className={
-                        transaction.type === "debit" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
-                      }>
-                        {transaction.type === "debit" ? "-" : "+"}
-                        {formatCurrency(Math.abs(transaction.amount))}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="p-4 text-sm">
+                      <div className="flex flex-col gap-1.5">
+                        <select
+                          value={transaction.category || ""}
+                          onChange={(e) =>
+                            onCategorize([transaction.id], e.target.value)
+                          }
+                          aria-label={`Category for ${transaction.description}`}
+                          className="w-40 border border-input rounded-md bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                        >
+                          <option value="">{UNCATEGORIZED}</option>
+                          {availableCategories.map(category => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+
+                        {suggestion && (
+                          <button
+                            type="button"
+                            onClick={() => onCategorize([transaction.id], suggestion)}
+                            className="inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary hover:bg-primary/20"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Suggest: {suggestion}
+                          </button>
+                        )}
+
+                        {transaction.category && sharedIds.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onCategorize(sharedIds, transaction.category as string)
+                            }
+                            className="w-fit text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          >
+                            Apply to all {sharedIds.length} from this merchant
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm text-muted-foreground">
+                      {transaction.account || "—"}
+                    </td>
+                    <td className="p-4 text-sm text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {transaction.type === "debit" ? (
+                          <TrendingDown className="h-3 w-3 text-red-500" />
+                        ) : (
+                          <TrendingUp className="h-3 w-3 text-green-500" />
+                        )}
+                        <span className={
+                          transaction.type === "debit" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                        }>
+                          {transaction.type === "debit" ? "-" : "+"}
+                          {formatCurrency(Math.abs(transaction.amount))}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

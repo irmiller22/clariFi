@@ -70,6 +70,7 @@ def _serialize(stored: StoredTransaction) -> TransactionRead:
         id=str(stored.id),
         date=txn.transaction_date.isoformat(),
         description=txn.description,
+        merchant=txn.merchant,
         amount=float(txn.amount),
         category=txn.category,
         type=txn.type,
